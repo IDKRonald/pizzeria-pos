@@ -5,7 +5,7 @@
  * Este componente es INVISIBLE en pantalla (display:none).
  * Solo se muestra cuando el usuario imprime la página via window.print().
  */
-const ETIQUETAS_PAGO = {
+export const ETIQUETAS_PAGO = {
   efectivo:        'Efectivo',
   transferencia:   'Transferencia / Nequi',
   tarjeta_debito:  'Tarjeta Débito',

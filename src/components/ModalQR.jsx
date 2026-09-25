@@ -1,34 +1,9 @@
 // src/components/ModalQR.jsx
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { getRedLocal } from '../lib/api';
 
 const LS_QR_URL = 'pos_v1_qr_url';
 const PORT       = window.location.port || '5173';
-
-/* ─── Detectar IP local vía WebRTC ────────────────────────────────────── */
-async function detectarIPLocal() {
-  return new Promise((resolve) => {
-    try {
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      pc.createDataChannel('');
-      pc.createOffer()
-        .then((sdp) => pc.setLocalDescription(sdp))
-        .catch(() => resolve(null));
-
-      pc.onicecandidate = ({ candidate }) => {
-        if (!candidate?.candidate) return;
-        const ip = /([0-9]{1,3}(?:\.[0-9]{1,3}){3})/.exec(candidate.candidate)?.[1];
-        if (ip && !ip.startsWith('127.') && !ip.startsWith('169.254.')) {
-          resolve(ip);
-          try { pc.close(); } catch { /* ok */ }
-        }
-      };
-
-      setTimeout(() => { resolve(null); try { pc.close(); } catch { /* ok */ } }, 3500);
-    } catch {
-      resolve(null);
-    }
-  });
-}
 
 /* ─── URL inicial ─────────────────────────────────────────────────────── */
 function getUrlInicial() {
@@ -48,8 +23,11 @@ function getUrlInicial() {
 export default function ModalQR({ onCerrar }) {
   const [url, setUrl]             = useState(getUrlInicial);
   const [detectando, setDetectando] = useState(false);
+  const [candidatas, setCandidatas] = useState([]); // IPs de red detectadas en el backend
+  const [errorDeteccion, setErrorDeteccion] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false); // indicador "Guardada ✓"
   const debounceRef = useRef(null);
+  const eraLocalhostAlAbrir = useRef(/localhost|127\.0\.0\.1/.test(url));
 
   /* Cada vez que `url` cambia → guardar en localStorage (debounce 400ms) */
   useEffect(() => {
@@ -62,15 +40,32 @@ export default function ModalQR({ onCerrar }) {
     return () => clearTimeout(debounceRef.current);
   }, [url]);
 
-  /* Auto-detectar IP via WebRTC */
+  /* Preguntarle al backend (Node) su(s) IP(s) de red local — mucho más
+     confiable que detectarla desde el navegador, que por privacidad suele
+     ocultarla detrás de un nombre *.local vía WebRTC. */
   const handleDetectar = async () => {
     setDetectando(true);
-    const ip = await detectarIPLocal();
-    if (ip) {
-      setUrl(`http://${ip}:${PORT}`);
+    setErrorDeteccion(false);
+    try {
+      const { ips } = await getRedLocal();
+      setCandidatas(ips || []);
+      if (ips && ips.length > 0) {
+        setUrl(`http://${ips[0].ip}:${PORT}`);
+      } else {
+        setErrorDeteccion(true);
+      }
+    } catch {
+      setErrorDeteccion(true);
+    } finally {
+      setDetectando(false);
     }
-    setDetectando(false);
   };
+
+  /* Al abrir el modal: si no hay ya una IP elegida, detecta sola sin que haya que tocar nada */
+  useEffect(() => {
+    if (eraLocalhostAlAbrir.current) handleDetectar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const esLocalhost = /localhost|127\.0\.0\.1/.test(url);
 
@@ -184,19 +179,54 @@ export default function ModalQR({ onCerrar }) {
             <p className="mt-1.5 text-[10px]" style={{ color: 'var(--text-4)' }}>
               La dirección se guarda automáticamente al editarla.
             </p>
+
+            {/* Si la PC tiene más de una red (ej. WiFi + cable), dejar elegir cuál usar */}
+            {candidatas.length > 1 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {candidatas.map((c) => {
+                  const suUrl = `http://${c.ip}:${PORT}`;
+                  const activa = url === suUrl;
+                  return (
+                    <button key={c.ip} onClick={() => setUrl(suUrl)}
+                      className="px-2 py-1 rounded-lg text-[10px] font-mono transition-all"
+                      style={{
+                        background: activa ? 'rgba(249,115,22,0.15)' : 'var(--bg-surf6)',
+                        border: activa ? '1px solid rgb(249,115,22)' : '1px solid var(--border-2)',
+                        color: activa ? 'rgb(249,115,22)' : 'var(--text-3)',
+                      }}>
+                      {c.interfaz}: {c.ip}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Aviso según tipo de URL */}
-          {esLocalhost ? (
+          {errorDeteccion ? (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs"
+              style={{ background: 'rgba(234,108,16,0.1)', border: '1px solid rgba(234,108,16,0.3)',
+                color: 'rgb(160,80,0)' }}>
+              <span className="text-sm shrink-0">⚠️</span>
+              <span>
+                No se pudo detectar la IP automáticamente (¿el backend está corriendo?).
+                Edita la dirección a mano con la IP de tu PC (ej.{' '}
+                <code className="font-mono">192.168.1.45:{PORT}</code>) — la encuentras
+                escribiendo <code className="font-mono">ipconfig</code> en una consola de Windows.
+              </span>
+            </div>
+          ) : esLocalhost ? (
             <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs"
               style={{ background: 'rgba(234,108,16,0.1)', border: '1px solid rgba(234,108,16,0.3)',
                 color: 'rgb(160,80,0)' }}>
               <span className="text-sm shrink-0">⚠️</span>
               <span>
                 <strong>localhost</strong> solo funciona en este PC.
-                Presiona <strong>🔍</strong> para detectar tu IP automáticamente,
-                o edita la dirección con la IP de tu PC (ej.{' '}
-                <code className="font-mono">192.168.1.45:{PORT}</code>).
+                {detectando ? ' Detectando tu IP automáticamente…' : (
+                  <>Presiona <strong>🔍</strong> para detectar tu IP automáticamente,
+                  o edita la dirección con la IP de tu PC (ej.{' '}
+                  <code className="font-mono">192.168.1.45:{PORT}</code>).</>
+                )}
               </span>
             </div>
           ) : (

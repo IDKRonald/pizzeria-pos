@@ -15,6 +15,7 @@ import db from './db/connection.js';            // Inicializa BD + schema
 import './db/seed.js';                          // Seed automático si BD vacía
 import apiRouter from './routes/index.js';
 import { registerSocketHandlers } from './sockets/handlers.js';
+import { UPLOADS_DIR } from './paths.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -35,7 +36,7 @@ app.use('/api', apiRouter);
 
 // ── Archivos estáticos (imágenes subidas) ────────────────────
 // GET /uploads/<filename> → devuelve la imagen guardada en backend/uploads/
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // ── HTTP + Socket.io ─────────────────────────────────────────
 const httpServer = createServer(app);

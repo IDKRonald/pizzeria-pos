@@ -6,14 +6,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
-
-// Crear la carpeta si no existe
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+import { UPLOADS_DIR } from '../paths.js';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),

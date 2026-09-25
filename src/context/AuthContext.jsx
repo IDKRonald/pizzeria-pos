@@ -37,6 +37,14 @@ export function AuthProvider({ children }) {
     }
   }, [usuario]);
 
+  // Cuando un admin resetea los datos de prueba, todo el mundo recarga
+  // para no seguir mostrando pedidos/mesas que ya no existen.
+  useEffect(() => {
+    const onDatosReseteados = () => window.location.reload();
+    socket.on('datos_reseteados', onDatosReseteados);
+    return () => socket.off('datos_reseteados', onDatosReseteados);
+  }, []);
+
   const login = useCallback(async (pin) => {
     setLoading(true);
     setError(null);

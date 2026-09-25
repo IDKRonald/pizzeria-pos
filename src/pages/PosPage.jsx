@@ -6,7 +6,7 @@ import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto } fr
 import { useCajaAbierta } from '../hooks/useCajaAbierta';
 import ProductCard from '../components/ProductCard';
 import CheckoutSidebar from '../components/CheckoutSidebar';
-import TicketImpresion from '../components/TicketImpresion';
+import TicketImpresion, { ETIQUETAS_PAGO } from '../components/TicketImpresion';
 import ModalVariantes from '../components/ModalVariantes';
 import ModalComboBebida from '../components/ModalComboBebida';
 import ModalCustomItem from '../components/ModalCustomItem';
@@ -20,9 +20,43 @@ const LS_DOMICILIO = 'pos_v1_domicilio';
 const LS_COSTO_DOM = 'pos_v1_costo_domicilio';
 const LS_ULTIMO_RECIBO = 'pos_v1_ultimo_recibo';
 const LS_IMPRIMIR_COPIA = 'pos_v1_imprimir_copia';
+const LS_ENVIAR_WHATSAPP = 'pos_v1_enviar_whatsapp';
 
 const formatCOP = (v) =>
   v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
+
+/** Arma el texto plano de la factura para enviar por WhatsApp (wa.me solo soporta texto, no adjuntar archivos) */
+function construirTextoFactura(recibo) {
+  const { cart, total, ordenNumero, fechaHora, tipoPago, esDomicilio, propina = 0, costoDomicilio = 0, mesa, pagoActual = 0, montoPagadoHistorico = 0 } = recibo;
+  const subtotal = total - propina - costoDomicilio;
+  const lineas = [
+    '🍕 *Pizzería Don Peñolinni*',
+    `Orden #${ordenNumero} · ${fechaHora}`,
+    esDomicilio ? 'Domicilio' : mesa ? `Mesa: ${mesa}` : 'Venta mostrador',
+    '',
+    ...cart.map((i) => `${i.cantidad}x ${i.nombre} — ${formatCOP(i.precio * i.cantidad)}`),
+    '',
+    `Subtotal: ${formatCOP(subtotal)}`,
+  ];
+  if (propina > 0) lineas.push(`Propina: ${formatCOP(propina)}`);
+  if (costoDomicilio > 0) lineas.push(`Domicilio: ${formatCOP(costoDomicilio)}`);
+  lineas.push(`*TOTAL: ${formatCOP(total)}*`);
+  if (montoPagadoHistorico > 0) lineas.push(`Abonos anteriores: ${formatCOP(montoPagadoHistorico)}`);
+  const saldo = total - (montoPagadoHistorico + pagoActual);
+  if (saldo > 0) lineas.push(`Saldo restante: ${formatCOP(saldo)}`);
+  lineas.push('', `Pago: ${ETIQUETAS_PAGO[tipoPago] || tipoPago}`, '', '¡Gracias por tu compra! 🙌');
+  return lineas.join('\n');
+}
+
+/** Pide el número del cliente y abre WhatsApp con la factura ya redactada, lista para enviar */
+function enviarPorWhatsApp(recibo) {
+  const numeroCrudo = prompt('Número de WhatsApp del cliente (ej: 3001234567):');
+  if (!numeroCrudo) return;
+  let digitos = numeroCrudo.replace(/\D/g, '');
+  if (digitos.length === 10) digitos = '57' + digitos; // celular colombiano sin indicativo
+  const texto = construirTextoFactura(recibo);
+  window.open(`https://wa.me/${digitos}?text=${encodeURIComponent(texto)}`, '_blank');
+}
 
 function lsRead(key, fallback) {
   try {
@@ -71,6 +105,7 @@ export default function PosPage() {
   const [costoDomicilio, setCostoDomicilio] = useState(() => lsRead(LS_COSTO_DOM, ''));
   const [conPropina, setConPropina]         = useState(false);
   const [imprimirCopia, setImprimirCopia]   = useState(() => lsRead(LS_IMPRIMIR_COPIA, false));
+  const [enviarWhatsapp, setEnviarWhatsapp] = useState(() => lsRead(LS_ENVIAR_WHATSAPP, false));
   const [mesa, setMesa]                     = useState('');
 
   /* ── Ultimo Recibo ── */
@@ -116,6 +151,7 @@ export default function PosPage() {
   useEffect(() => { localStorage.setItem(LS_COSTO_DOM, JSON.stringify(costoDomicilio)); }, [costoDomicilio]);
   useEffect(() => { localStorage.setItem(LS_ULTIMO_RECIBO, JSON.stringify(ultimoRecibo)); }, [ultimoRecibo]);
   useEffect(() => { localStorage.setItem(LS_IMPRIMIR_COPIA, JSON.stringify(imprimirCopia)); }, [imprimirCopia]);
+  useEffect(() => { localStorage.setItem(LS_ENVIAR_WHATSAPP, JSON.stringify(enviarWhatsapp)); }, [enviarWhatsapp]);
 
   /* ── Toast auto-dismiss ── */
   useEffect(() => {
@@ -352,13 +388,16 @@ export default function PosPage() {
       const abonoRaw = parseInt(String(montoAbonar).replace(/\D/g, ''));
       const pago_actual = facturarAhorita ? (!isNaN(abonoRaw) ? abonoRaw : saldoRestante) : 0;
 
-      setUltimoRecibo({
+      const recibo = {
         cart, total: tot, ordenNumero, fechaHora,
         tipoPago, esDomicilio, propina: prop, costoDomicilio: dom, mesa,
         montoEntregado: tipoPago === 'efectivo' ? (parseInt(montoEntregado.toString().replace(/\D/g, '')) || 0) : 0,
         pagoActual: pago_actual,
         montoPagadoHistorico,
-      });
+      };
+      setUltimoRecibo(recibo);
+
+      if (enviarWhatsapp) enviarPorWhatsApp(recibo);
 
       setTimeout(() => {
         window.print();
@@ -377,7 +416,7 @@ export default function PosPage() {
       alert(err?.message || 'Error al guardar el pedido en la base de datos');
       setIsProcesando(false);
     }
-  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, imprimirCopia, montoEntregado, resetOrden, usuario]);
+  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, imprimirCopia, enviarWhatsapp, montoEntregado, resetOrden, usuario]);
 
   const handleEnviarCocina = useCallback(async () => {
     if (cart.length === 0 || isProcesando || edicionBloqueada) return;
@@ -387,7 +426,20 @@ export default function PosPage() {
       // 1. Guardar en BD (mantenemos su estado original si existe, o 'pendiente')
       await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente');
 
-      // 2. Feedback visual y reset
+      // 2. Enviar por WhatsApp si el toggle está activo (no solo al cobrar —
+      // el mesero puede querer mandarle el pedido al cliente sin facturar todavía)
+      if (enviarWhatsapp) {
+        const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
+        const prop = conPropina ? Math.round(sub * 0.10) : 0;
+        const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
+        enviarPorWhatsApp({
+          cart, total: sub + prop + dom, ordenNumero, fechaHora,
+          tipoPago, esDomicilio, propina: prop, costoDomicilio: dom, mesa,
+          pagoActual: 0, montoPagadoHistorico,
+        });
+      }
+
+      // 3. Feedback visual y reset
       setToastMsg('👨‍🍳 Pedido enviado a cocina');
       setTimeout(() => {
         resetOrden();
@@ -398,7 +450,7 @@ export default function PosPage() {
       alert(err?.message || 'Error al enviar el pedido');
       setIsProcesando(false);
     }
-  }, [cart, isProcesando, edicionBloqueada, conPropina, tipoPago, esDomicilio, mesa, resetOrden, usuario]);
+  }, [cart, isProcesando, edicionBloqueada, conPropina, tipoPago, esDomicilio, costoDomicilio, mesa, enviarWhatsapp, ordenNumero, fechaHora, montoPagadoHistorico, resetOrden, usuario]);
 
   const handleReimprimir = useCallback(() => {
     if (!ultimoRecibo) return;
@@ -407,6 +459,11 @@ export default function PosPage() {
       window.print();
       setTimeout(() => setIsReprinting(false), 500);
     }, 150);
+  }, [ultimoRecibo]);
+
+  const handleEnviarWhatsApp = useCallback(() => {
+    if (!ultimoRecibo) return;
+    enviarPorWhatsApp(ultimoRecibo);
   }, [ultimoRecibo]);
 
   /* ── Atajos de teclado y Accesibilidad ── */
@@ -719,6 +776,18 @@ export default function PosPage() {
                   🖨️
                 </button>
               )}
+              {ultimoRecibo && (
+                <button aria-label="Enviar última factura por WhatsApp" title="Enviar por WhatsApp"
+                  onClick={handleEnviarWhatsApp}
+                  className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl
+                             text-base font-bold transition-colors duration-150"
+                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(34,197,94,0.6)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
+                >
+                  💬
+                </button>
+              )}
               {/* Botón atajos (solo desktop) */}
               <button id="btn-atajos" aria-label="Atajos de teclado" title="Atajos [?]"
                 onClick={() => setMostrarAtajos((v) => !v)}
@@ -840,6 +909,7 @@ export default function PosPage() {
             mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
             imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
+            enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
             montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
             facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
             montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
@@ -909,6 +979,7 @@ export default function PosPage() {
               mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
               imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
+              enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
               montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
               facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
               montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}

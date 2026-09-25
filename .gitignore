@@ -16,6 +16,12 @@ dist
 dist-ssr
 *.local
 
+# Instalador: herramientas de terceros descargadas y binarios generados
+installer/vendor
+installer/output
+installer/release
+backend/db/backups
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -386,5 +386,20 @@ export function getRentabilidad(filtros = {}) {
   return fetchApi(`/estadisticas/rentabilidad${qs ? `?${qs}` : ''}`);
 }
 
+/** IPs de red local de este PC + puerto, para armar el QR de "conectar dispositivo" */
+export function getRedLocal() {
+  return fetchApi('/red-local');
+}
+
+// ── Admin: mantenimiento ─────────────────────────────────────
+
+/** Borra todo el historial de pedidos/caja/movimientos de prueba (admin). No toca carta ni insumos configurados. */
+export function resetearDatosPrueba({ revertir_stock = true } = {}, usuarioId) {
+  return fetchApi('/admin/reset-datos-prueba', {
+    method: 'POST',
+    body: JSON.stringify({ revertir_stock, confirmar: 'BORRAR', usuario_id: usuarioId }),
+  });
+}
+
 export { API_BASE };
 export default fetchApi;

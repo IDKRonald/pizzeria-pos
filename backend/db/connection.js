@@ -6,9 +6,9 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { runMigrations } from './migrate.js';
+import { DB_PATH } from '../paths.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, 'don_penolinni.db');
 
 /** Crea (o abre) la base de datos y aplica PRAGMAs de concurrencia */
 function createConnection() {

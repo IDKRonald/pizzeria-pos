@@ -42,6 +42,8 @@ export default function CheckoutSidebar({
   onIrACaja,
   imprimirCopia,
   setImprimirCopia,
+  enviarWhatsapp,
+  setEnviarWhatsapp,
   montoEntregado,
   setMontoEntregado,
   isDrawer = false,
@@ -351,7 +353,7 @@ export default function CheckoutSidebar({
         )}
 
         {/* ── Botones de Ajuste Rápidos ── */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {/* Domicilio toggle */}
           <button
             onClick={() => {
@@ -397,6 +399,19 @@ export default function CheckoutSidebar({
           >
             <span className="text-lg leading-none mb-1">🖨️</span>
             <span className="text-[10px] font-extrabold tracking-wide uppercase leading-none">+ Copia</span>
+          </button>
+
+          <button
+            onClick={() => setEnviarWhatsapp((prev) => !prev)}
+            className="flex flex-col items-center justify-center p-2 rounded-xl transition-all shadow-sm border border-transparent focus:outline-none"
+            style={{
+              background: enviarWhatsapp ? 'rgb(22,163,74)' : 'var(--bg-surf6)',
+              color: enviarWhatsapp ? '#fff' : 'var(--text-3)',
+              borderColor: enviarWhatsapp ? 'transparent' : 'var(--border-2)',
+            }}
+          >
+            <span className="text-lg leading-none mb-1">💬</span>
+            <span className="text-[10px] font-extrabold tracking-wide uppercase leading-none">WhatsApp</span>
           </button>
         </div>
 

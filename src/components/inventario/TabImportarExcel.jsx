@@ -93,8 +93,15 @@ export default function TabImportarExcel() {
         <code style={{ color: '#fbbf24' }}> proveedor</code> es el nombre — si no existe todavía, se crea automáticamente.
       </p>
 
-      <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={handleArchivo}
-        className="block text-sm" style={{ color: '#94a3b8' }} />
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => inputRef.current?.click()}
+          className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+          style={{ background: 'rgb(249,115,22)' }}>
+          📂 Seleccionar archivo Excel
+        </button>
+        {nombreArchivo && <span className="text-xs" style={{ color: '#94a3b8' }}>{nombreArchivo}</span>}
+      </div>
+      <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={handleArchivo} className="hidden" />
 
       {error && <p className="text-sm text-red-400">⚠️ {error}</p>}
 

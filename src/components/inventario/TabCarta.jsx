@@ -1,5 +1,5 @@
-﻿// src/components/inventario/TabCarta.jsx
-// Editor de la carta: categorÃ­as, productos (simples o con tamaÃ±os) y sus variantes.
+// src/components/inventario/TabCarta.jsx
+// Editor de la carta: categorías, productos (simples o con tamaños) y sus variantes.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -14,19 +14,19 @@ const formatCOP = (v) => (v || 0).toLocaleString('es-CO', { style: 'currency', c
 /** Detecta si la cadena es una URL de imagen (subida) o un emoji/texto */
 const esUrl = (s) => typeof s === 'string' && (s.startsWith('/uploads/') || s.startsWith('http'));
 
-/** Renderiza la imagen de un producto: URL â†’ <img>, emoji/texto â†’ <span> */
+/** Renderiza la imagen de un producto: URL → <img>, emoji/texto → <span> */
 function ProductoImagen({ src, className = 'w-10 h-10 object-cover rounded-lg' }) {
   const backendHost = `http://${window.location.hostname}:3001`;
   if (esUrl(src)) {
     const fullSrc = src.startsWith('http') ? src : `${backendHost}${src}`;
     return <img src={fullSrc} alt="" className={className} style={{ objectFit: 'cover' }} />;
   }
-  return <span className="text-2xl leading-none">{src || 'ðŸ½ï¸'}</span>;
+  return <span className="text-2xl leading-none">{src || '🍽️'}</span>;
 }
 
 /**
- * Selector de imagen con drag-and-drop, preview y botÃ³n de quitar.
- * Sube automÃ¡ticamente al seleccionar y llama a onUploaded(url).
+ * Selector de imagen con drag-and-drop, preview y botón de quitar.
+ * Sube automáticamente al seleccionar y llama a onUploaded(url).
  */
 function ImagenPicker({ value, onUploaded }) {
   const inputRef = useRef(null);
@@ -80,14 +80,14 @@ function ImagenPicker({ value, onUploaded }) {
         {subiendo ? (
           <div className="flex flex-col items-center gap-2">
             <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs" style={{ color: '#94a3b8' }}>Subiendoâ€¦</span>
+            <span className="text-xs" style={{ color: '#94a3b8' }}>Subiendo…</span>
           </div>
         ) : tieneImagen ? (
           <>
             <img src={fullSrc} alt="" className="w-full h-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
               style={{ background: 'rgba(0,0,0,0.55)' }}>
-              <span className="text-xs font-bold text-white">ðŸ”„ Cambiar imagen</span>
+              <span className="text-xs font-bold text-white">🔄 Cambiar imagen</span>
             </div>
           </>
         ) : (
@@ -96,11 +96,11 @@ function ImagenPicker({ value, onUploaded }) {
             {value && !tieneImagen && (
               <span className="text-3xl mb-1">{value}</span>
             )}
-            <span className="text-2xl">ðŸ“·</span>
+            <span className="text-2xl">📷</span>
             <span className="text-xs" style={{ color: '#94a3b8' }}>
               Clic o arrastra una imagen
             </span>
-            <span className="text-[10px]" style={{ color: '#475569' }}>JPG, PNG, WebP Â· mÃ¡x. 5 MB</span>
+            <span className="text-[10px]" style={{ color: '#475569' }}>JPG, PNG, WebP · máx. 5 MB</span>
           </div>
         )}
       </div>
@@ -110,13 +110,13 @@ function ImagenPicker({ value, onUploaded }) {
         <button type="button" onClick={() => inputRef.current?.click()}
           className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
           style={{ background: '#1e1e2d', color: '#e2e8f0', border: '1px solid #2a2a3a' }}>
-          ðŸ“‚ Seleccionar archivo
+          📂 Seleccionar archivo
         </button>
         {tieneImagen && (
-          <button type="button" onClick={() => onUploaded('ðŸ½ï¸')}
+          <button type="button" onClick={() => onUploaded('🍽️')}
             className="px-3 py-1.5 rounded-lg text-xs"
             style={{ background: '#1e1e2d', color: '#f87171', border: '1px solid #2a2a3a' }}>
-            âœ• Quitar
+            ✕ Quitar
           </button>
         )}
       </div>
@@ -135,7 +135,7 @@ export default function TabCarta() {
   const [filtroCategoria, setFiltroCategoria] = useState('');
 
   const [editandoCat, setEditandoCat] = useState(null);
-  const [formCat, setFormCat] = useState({ nombre: '', emoji: 'ðŸ“¦', orden: 0 });
+  const [formCat, setFormCat] = useState({ nombre: '', emoji: '📦', orden: 0 });
 
   const [editandoProd, setEditandoProd] = useState(null); // {} nuevo, {id,...} editar
   const [formProd, setFormProd] = useState({});
@@ -154,8 +154,8 @@ export default function TabCarta() {
     filtroCategoria ? productos.filter((p) => p.categoria_id === Number(filtroCategoria)) : productos,
   [productos, filtroCategoria]);
 
-  // â”€â”€ CategorÃ­as â”€â”€
-  const abrirNuevaCat = () => { setFormCat({ nombre: '', emoji: 'ðŸ“¦', orden: categorias.length }); setEditandoCat({}); };
+  // ── Categorías ──
+  const abrirNuevaCat = () => { setFormCat({ nombre: '', emoji: '📦', orden: categorias.length }); setEditandoCat({}); };
   const abrirEditarCat = (c) => { setFormCat({ nombre: c.nombre, emoji: c.emoji, orden: c.orden }); setEditandoCat(c); };
   const guardarCat = async (e) => {
     e.preventDefault();
@@ -167,13 +167,13 @@ export default function TabCarta() {
     } catch (err) { alert(err.message); }
   };
   const quitarCat = async (c) => {
-    if (!confirm(`Â¿Eliminar la categorÃ­a "${c.nombre}"?`)) return;
+    if (!confirm(`¿Eliminar la categoría "${c.nombre}"?`)) return;
     try { await eliminarCategoria(c.id, usuario.id); cargar(); } catch (err) { alert(err.message); }
   };
 
-  // â”€â”€ Productos â”€â”€
+  // ── Productos ──
   const abrirNuevoProd = () => {
-    setFormProd({ nombre: '', descripcion: '', categoria_id: categorias[0]?.id || '', imagen: 'ðŸ½ï¸', tiene_variantes: false, precio: '', variantes: [] });
+    setFormProd({ nombre: '', descripcion: '', categoria_id: categorias[0]?.id || '', imagen: '🍽️', tiene_variantes: false, precio: '', variantes: [] });
     setEditandoProd({});
   };
   const abrirEditarProd = (p) => {
@@ -188,7 +188,7 @@ export default function TabCarta() {
         await actualizarProducto(editandoProd.id, formProd, usuario.id);
       } else {
         if (formProd.tiene_variantes && (!formProd.variantes || formProd.variantes.length === 0)) {
-          alert('Agrega al menos un tamaÃ±o antes de guardar');
+          alert('Agrega al menos un tamaño antes de guardar');
           return;
         }
         await crearProducto(formProd, usuario.id);
@@ -199,12 +199,12 @@ export default function TabCarta() {
   };
 
   const quitarProd = async (p) => {
-    if (!confirm(`Â¿Eliminar "${p.nombre}"? Si tiene ventas registradas, se sugerirÃ¡ desactivarlo en su lugar.`)) return;
+    if (!confirm(`¿Eliminar "${p.nombre}"? Si tiene ventas registradas, se sugerirá desactivarlo en su lugar.`)) return;
     try {
       await eliminarProducto(p.id, usuario.id);
       cargar();
     } catch (err) {
-      if (err.status === 409 && confirm(`${err.message}\n\nÂ¿Desactivarlo ahora?`)) {
+      if (err.status === 409 && confirm(`${err.message}\n\n¿Desactivarlo ahora?`)) {
         try { await actualizarProducto(p.id, { activo: 0 }, usuario.id); cargar(); } catch (e2) { alert(e2.message); }
       } else {
         alert(err.message);
@@ -216,7 +216,7 @@ export default function TabCarta() {
     try { await actualizarProducto(p.id, { activo: p.activo ? 0 : 1 }, usuario.id); cargar(); } catch (err) { alert(err.message); }
   };
 
-  // â”€â”€ Variantes (dentro del formulario nuevo, en memoria; en ediciÃ³n, contra el backend) â”€â”€
+  // ── Variantes (dentro del formulario nuevo, en memoria; en edición, contra el backend) ──
   const agregarVarianteNueva = () => {
     if (!nuevaVariante.nombre_tamanio || !nuevaVariante.precio) return;
     setFormProd((f) => ({ ...f, variantes: [...(f.variantes || []), { ...nuevaVariante, precio: Number(nuevaVariante.precio) }] }));
@@ -245,7 +245,7 @@ export default function TabCarta() {
     } catch (err) { alert(err.message); }
   };
   const quitarVarianteExistente = async (v) => {
-    if (!confirm(`Â¿Eliminar el tamaÃ±o "${v.nombre_tamanio}"?`)) return;
+    if (!confirm(`¿Eliminar el tamaño "${v.nombre_tamanio}"?`)) return;
     try {
       await eliminarVariante(v.id, usuario.id);
       const prods = await getProductosAdmin();
@@ -256,18 +256,18 @@ export default function TabCarta() {
 
   return (
     <div className="space-y-6">
-      {/* CategorÃ­as */}
+      {/* Categorías */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold text-white">CategorÃ­as</h2>
-          <button onClick={abrirNuevaCat} className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white" style={{ background: 'rgb(249,115,22)' }}>ï¼‹ Nueva categorÃ­a</button>
+          <h2 className="text-lg font-bold text-white">Categorías</h2>
+          <button onClick={abrirNuevaCat} className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white" style={{ background: 'rgb(249,115,22)' }}>＋ Nueva categoría</button>
         </div>
         <div className="flex flex-wrap gap-2">
           {categorias.map((c) => (
             <div key={c.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs" style={{ background: '#13131b', border: '1px solid #2a2a3a', color: '#e2e8f0' }}>
               <span>{c.emoji} {c.nombre}</span>
-              <button onClick={() => abrirEditarCat(c)} style={{ color: '#94a3b8' }}>âœŽ</button>
-              <button onClick={() => quitarCat(c)} style={{ color: '#f87171' }}>âœ•</button>
+              <button onClick={() => abrirEditarCat(c)} style={{ color: '#94a3b8' }}>✎</button>
+              <button onClick={() => quitarCat(c)} style={{ color: '#f87171' }}>✕</button>
             </div>
           ))}
         </div>
@@ -279,14 +279,14 @@ export default function TabCarta() {
           <h2 className="text-lg font-bold text-white">Productos</h2>
           <div className="flex items-center gap-2">
             <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} className="px-3 py-2 rounded-lg text-sm" style={inputStyle}>
-              <option value="">Todas las categorÃ­as</option>
+              <option value="">Todas las categorías</option>
               {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
-            <button onClick={abrirNuevoProd} className="px-3.5 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: 'rgb(249,115,22)' }}>ï¼‹ Nuevo producto</button>
+            <button onClick={abrirNuevoProd} className="px-3.5 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: 'rgb(249,115,22)' }}>＋ Nuevo producto</button>
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-400">âš ï¸ {error}</p>}
+        {error && <p className="text-sm text-red-400">⚠️ {error}</p>}
 
         {cargando ? (
           <div className="flex justify-center py-10"><div className="w-8 h-8 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -309,8 +309,8 @@ export default function TabCarta() {
                 </p>
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => abrirEditarProd(p)} className="flex-1 py-1.5 rounded-lg text-xs font-semibold" style={{ background: '#1e1e2d', color: '#e2e8f0' }}>Editar</button>
-                  <button onClick={() => toggleActivo(p)} className="px-2.5 py-1.5 rounded-lg text-xs" style={{ background: '#1e1e2d', color: '#fbbf24' }}>{p.activo ? 'â¸' : 'â–¶'}</button>
-                  <button onClick={() => quitarProd(p)} className="px-2.5 py-1.5 rounded-lg text-xs" style={{ background: '#1e1e2d', color: '#f87171' }}>âœ•</button>
+                  <button onClick={() => toggleActivo(p)} className="px-2.5 py-1.5 rounded-lg text-xs" style={{ background: '#1e1e2d', color: '#fbbf24' }}>{p.activo ? '⏸' : '▶'}</button>
+                  <button onClick={() => quitarProd(p)} className="px-2.5 py-1.5 rounded-lg text-xs" style={{ background: '#1e1e2d', color: '#f87171' }}>✕</button>
                 </div>
               </div>
             ))}
@@ -318,11 +318,11 @@ export default function TabCarta() {
         )}
       </div>
 
-      {/* Modal categorÃ­a */}
+      {/* Modal categoría */}
       {editandoCat && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setEditandoCat(null)}>
           <form onClick={(e) => e.stopPropagation()} onSubmit={guardarCat} className="w-full max-w-xs rounded-2xl p-5 space-y-3" style={{ background: '#13131b', border: '1px solid #2a2a3a' }}>
-            <h3 className="text-base font-bold text-white">{editandoCat.id ? 'Editar categorÃ­a' : 'Nueva categorÃ­a'}</h3>
+            <h3 className="text-base font-bold text-white">{editandoCat.id ? 'Editar categoría' : 'Nueva categoría'}</h3>
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-2">
                 <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Nombre</label>
@@ -353,18 +353,18 @@ export default function TabCarta() {
               <input required value={formProd.nombre} onChange={(e) => setFormProd((f) => ({ ...f, nombre: e.target.value }))} className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
             </div>
 
-            {/* â”€â”€ Selector de imagen â”€â”€ */}
+            {/* ── Selector de imagen ── */}
             <ImagenPicker
               value={formProd.imagen}
               onUploaded={(url) => setFormProd((f) => ({ ...f, imagen: url }))}
             />
 
             <div>
-              <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>DescripciÃ³n (opcional)</label>
+              <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Descripción (opcional)</label>
               <input value={formProd.descripcion} onChange={(e) => setFormProd((f) => ({ ...f, descripcion: e.target.value }))} className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>CategorÃ­a</label>
+              <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Categoría</label>
               <select value={formProd.categoria_id} onChange={(e) => setFormProd((f) => ({ ...f, categoria_id: Number(e.target.value) }))} className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle}>
                 {categorias.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.nombre}</option>)}
               </select>
@@ -373,7 +373,7 @@ export default function TabCarta() {
             {!editandoProd.id && (
               <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#1e1e2d' }}>
                 <input type="checkbox" checked={formProd.tiene_variantes} onChange={(e) => setFormProd((f) => ({ ...f, tiene_variantes: e.target.checked }))} />
-                <span className="text-xs" style={{ color: '#e2e8f0' }}>Tiene tamaÃ±os/variantes (ej. pizza con Personal/Mediana/Familiar)</span>
+                <span className="text-xs" style={{ color: '#e2e8f0' }}>Tiene tamaños/variantes (ej. pizza con Personal/Mediana/Familiar)</span>
               </div>
             )}
 
@@ -403,10 +403,10 @@ export default function TabCarta() {
               </div>
             )}
 
-            {/* TamaÃ±os/variantes */}
+            {/* Tamaños/variantes */}
             {(formProd.tiene_variantes || editandoProd.tiene_variantes) && (
               <div>
-                <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>TamaÃ±os</label>
+                <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Tamaños</label>
                 <div className="space-y-1.5">
                   {(editandoProd.id ? editandoProd.variantes : formProd.variantes || []).map((v, idx) => (
                     <div key={v.id || idx} className="flex items-center gap-2">
@@ -418,7 +418,7 @@ export default function TabCarta() {
                         <span className="text-xs" style={{ color: '#94a3b8' }}>{formatCOP(v.precio)}</span>
                       )}
                       <button type="button" onClick={() => editandoProd.id ? quitarVarianteExistente(v) : quitarVarianteNueva(idx)}
-                        className="w-6 h-6 rounded text-xs" style={{ background: '#1e1e2d', color: '#f87171' }}>âœ•</button>
+                        className="w-6 h-6 rounded text-xs" style={{ background: '#1e1e2d', color: '#f87171' }}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -428,7 +428,7 @@ export default function TabCarta() {
                   <input type="number" placeholder="Precio" value={nuevaVariante.precio} onChange={(e) => setNuevaVariante((v) => ({ ...v, precio: e.target.value }))}
                     className="w-24 px-2 py-1.5 rounded text-xs" style={inputStyle} />
                   <button type="button" onClick={editandoProd.id ? agregarVarianteExistente : agregarVarianteNueva}
-                    className="px-2.5 py-1.5 rounded text-xs font-bold text-white" style={{ background: 'rgb(249,115,22)' }}>ï¼‹</button>
+                    className="px-2.5 py-1.5 rounded text-xs font-bold text-white" style={{ background: 'rgb(249,115,22)' }}>＋</button>
                 </div>
               </div>
             )}

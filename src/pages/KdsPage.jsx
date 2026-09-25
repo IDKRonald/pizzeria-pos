@@ -103,6 +103,23 @@ export default function KdsPage() {
     }
   }, []);
 
+  // Cancelar un pedido ya enviado a cocina (solo admin) — para emergencias de
+  // último momento, ej. el cliente se tuvo que ir. Si ya estaba pagado, revierte
+  // el descuento de inventario automáticamente (lo hace el backend).
+  const handleCancelar = useCallback(async (pedido) => {
+    if (!confirm(`¿Cancelar el pedido ${pedido.numero_orden}? Esta acción no se puede deshacer.`)) return;
+
+    setPedidos((prev) => prev.filter(p => p.id !== pedido.id));
+    setPedidoDetalle((prev) => (prev?.id === pedido.id ? null : prev));
+
+    try {
+      await actualizarEstadoPedido(pedido.id, 'cancelado');
+    } catch (err) {
+      console.error('Error al cancelar pedido:', err);
+      alert('No se pudo cancelar el pedido: ' + (err?.message || 'error desconocido'));
+    }
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#0a0a0f' }}>
       {/* Header */}
@@ -153,6 +170,7 @@ export default function KdsPage() {
                 pedido={pedido}
                 onAvanzar={handleAvanzarEstado}
                 onVerDetalle={() => setPedidoDetalle(pedido)}
+                onCancelar={usuario?.rol === 'admin' ? handleCancelar : null}
               />
             ))}
           </div>
@@ -165,6 +183,7 @@ export default function KdsPage() {
           pedido={pedidoDetalle}
           onCerrar={() => setPedidoDetalle(null)}
           onAvanzar={handleAvanzarEstado}
+          onCancelar={usuario?.rol === 'admin' ? handleCancelar : null}
         />
       )}
     </div>
@@ -173,7 +192,7 @@ export default function KdsPage() {
 
 // ── Ticket individual ────────────────────────────────────────────────────────
 
-function TicketKDS({ pedido, onAvanzar, onVerDetalle }) {
+function TicketKDS({ pedido, onAvanzar, onVerDetalle, onCancelar }) {
   const [minutos, setMinutos] = useState(0);
 
   // Actualizar timer
@@ -283,6 +302,16 @@ function TicketKDS({ pedido, onAvanzar, onVerDetalle }) {
            pedido.estado === 'en_preparacion' ? '✅ Marcar como Listo' :
            '🛎️ Entregar'}
         </button>
+        {/* Cancelación de último momento — solo visible para admin */}
+        {onCancelar && (
+          <button
+            onClick={() => onCancelar(pedido)}
+            className="w-full py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95"
+            style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171' }}
+          >
+            🗑️ Cancelar pedido
+          </button>
+        )}
       </div>
     </div>
   );
@@ -290,7 +319,7 @@ function TicketKDS({ pedido, onAvanzar, onVerDetalle }) {
 
 // ── Modal de detalles del pedido ─────────────────────────────────────────────
 
-function ModalDetalleKDS({ pedido, onCerrar, onAvanzar }) {
+function ModalDetalleKDS({ pedido, onCerrar, onAvanzar, onCancelar }) {
   const subtotalItems = (pedido.items || []).reduce(
     (acc, it) => acc + (it.subtotal || it.precio_unitario * it.cantidad || 0), 0
   );
@@ -420,6 +449,16 @@ function ModalDetalleKDS({ pedido, onCerrar, onAvanzar }) {
              pedido.estado === 'en_preparacion' ? '✅ Marcar como Listo' :
              '🛎️ Entregar pedido'}
           </button>
+          {/* Cancelación de último momento — solo visible para admin */}
+          {onCancelar && (
+            <button
+              onClick={() => onCancelar(pedido)}
+              className="w-full mt-2 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
+              style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171' }}
+            >
+              🗑️ Cancelar pedido
+            </button>
+          )}
         </div>
       </div>
     </div>
