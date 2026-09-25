@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ══════════════════════════════════════════════════════════════
+   TOKENS DE COLOR — CSS Custom Properties
+   Se aplican al div raíz con data-theme="dark" (default)
+   y se sobreescriben con data-theme="light"
+══════════════════════════════════════════════════════════════ */
+[data-theme="dark"], :root {
+  /* Fondos */
+  --bg-main:      #0f0f13;
+  --bg-surf1:     #13131b;   /* header */
+  --bg-surf2:     #1c1c28;   /* cards */
+  --bg-surf3:     #16161f;   /* sidebar */
+  --bg-surf4:     #1a1a26;   /* sidebar header/footer */
+  --bg-surf5:     #11111a;   /* filter bar */
+  --bg-surf6:     #1e1e2a;   /* inputs, selects */
+  --bg-surf7:     #22222f;   /* hover de controles */
+  /* Bordes */
+  --border-1:     #2a2a3a;
+  --border-2:     #2e2e42;
+  --border-3:     #3d3d52;
+  /* Texto */
+  --text-1:       #f1f0f5;
+  --text-2:       #cbd5e1;   /* slate-300 */
+  --text-3:       #94a3b8;   /* slate-400 */
+  --text-4:       #64748b;   /* slate-500 */
+  --text-5:       #475569;   /* slate-600 */
+  /* Cantidad en cart */
+  --qty-btn-bg:   #2e2e42;
+  /* Sombra modal */
+  --modal-overlay: rgba(0, 0, 0, 0.75);
+  /* Scrollbar */
+  --scrollbar-track: #1a1a22;
+  --scrollbar-thumb: #3d3d52;
+}
+
+[data-theme="light"] {
+  /* Fondos */
+  --bg-main:      #f0eff8;
+  --bg-surf1:     #ffffff;
+  --bg-surf2:     #ffffff;
+  --bg-surf3:     #f7f6fd;
+  --bg-surf4:     #ffffff;
+  --bg-surf5:     #ece9f8;
+  --bg-surf6:     #f5f3ff;
+  --bg-surf7:     #ede9ff;
+  /* Bordes */
+  --border-1:     #ddd9f2;
+  --border-2:     #ccc6ea;
+  --border-3:     #b5acd9;
+  /* Texto */
+  --text-1:       #1a1827;
+  --text-2:       #3a3555;
+  --text-3:       #6b6688;
+  --text-4:       #9590b5;
+  --text-5:       #c0bcd8;
+  /* Controles */
+  --qty-btn-bg:   #e8e4f8;
+  /* Sombra modal */
+  --modal-overlay: rgba(30, 20, 60, 0.55);
+  /* Scrollbar */
+  --scrollbar-track: #eae7f8;
+  --scrollbar-thumb: #c0bcd8;
+}
+
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-1);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar        { width: 5px; }
+::-webkit-scrollbar-track  { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb  { background: var(--scrollbar-thumb); border-radius: 3px; }
+
+/* ══════════════════════════════════════════════════════════════
+   IMPRESIÓN — Impresora térmica 80 mm (USB o Red)
+   Ancho de rollo: 80 mm  |  Área imprimible real: ≈ 72 mm
+══════════════════════════════════════════════════════════════ */
+@media print {
+  @page {
+    size: 80mm auto;   /* Ancho exacto del rollo */
+    margin: 2mm 4mm;   /* Márgenes reducidos */
+  }
+
+  /* ── Forzar negro absoluto en TODO el ticket ── */
+  /* Chrome puede heredar colores del tema (grises/claros) que la
+     impresora térmica no imprime correctamente. #000000 garantiza
+     la máxima densidad de tinta en el cabezal térmico.           */
+  *,
+  *::before,
+  *::after {
+    color: #000000 !important;
+    background: transparent !important;
+    border-color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 11px !important;
+  }
+
+  .no-print  { display: none !important; }
+  .print-only { display: block !important; }
+
+  .ticket-wrapper {
+    width: 100%;
+    max-width: 72mm;
+    margin: 0 auto;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+}
+.print-only { display: none; }
+
+/* ── Animación shake para PIN incorrecto ── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+  20%, 40%, 60%, 80% { transform: translateX(6px); }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}

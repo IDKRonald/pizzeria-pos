@@ -1,0 +1,58 @@
+Actúa como un Desarrollador Frontend Senior experto en React y Tailwind CSS. Tu objetivo es construir el MVP de un sistema de Punto de Venta (POS) para Don Peñolinni POS.
+
+CONTEXTO Y STACK
+
+El proyecto ya está inicializado con Vite, React y Tailwind CSS v4.
+
+No uses librerías de componentes externos (ni MUI, ni Chakra, ni Shadcn). Usa únicamente Tailwind CSS puro para los estilos.
+
+Todo debe ser responsivo, pero priorizando la vista de Escritorio/Tablet apaisada.
+
+El idioma es Español (Colombia), la moneda es COP, formato: $ 15.000.
+
+Diseño Dark Mode: La interfaz debe ser oscura (fondos oscuros, tarjetas en gris oscuro, botones de acción en tonos naranja/rojo).
+
+ARCHIVOS A CREAR/MODIFICAR (Modularidad Estricta)
+Debes separar los componentes lógicamente para mantener el código limpio.
+
+src/data/menu.js: Usa exactamente estos datos:
+export const menuPizzeria = [ { id: "p_marg_per", nombre: "Pizza Margarita (Personal)", precio: 18000, categoria: "Pizzas", imagen: "🍕" }, { id: "p_pepp_med", nombre: "Pizza Pepperoni (Mediana)", precio: 28000, categoria: "Pizzas", imagen: "🍕" }, { id: "p_carn_fam", nombre: "Pizza Carnívoros (Familiar)", precio: 45000, categoria: "Pizzas", imagen: "🍕" }, { id: "b_gas_400", nombre: "Gaseosa 400ml", precio: 4000, categoria: "Bebidas", imagen: "🥤" }, { id: "b_gas_15", nombre: "Gaseosa 1.5 Litros", precio: 8000, categoria: "Bebidas", imagen: "🥤" }, { id: "a_pan_ajo", nombre: "Pan de Ajo (3 uds)", precio: 6000, categoria: "Adicionales", imagen: "🥖" } ];
+
+REQUERIMIENTOS VISUALES (Layout)
+
+Área Principal (MenuGrid.jsx - Izquierda 70%):
+
+Cuadrícula (CSS Grid) con tarjetas de productos: Emoji gigante, Nombre, Precio y botón de "Agregar".
+
+Pestañas/botones inferiores para filtrar por categoría.
+
+Sidebar de Checkout (CartSidebar.jsx - Derecha 30%):
+
+Título "Orden Actual".
+
+Lista del carrito: Nombre, Control [-] {cantidad} [+], Subtotal.
+
+Bloque inferior fijo: Subtotal, Impuestos (0%), TOTAL A COBRAR.
+
+Botones finales: "Cancelar Orden" (rojo, limpia) y "Cobrar / Imprimir" (verde/naranja).
+
+LÓGICA DE ESTADO (Carrito en PosPage.jsx)
+Implementa el estado cart.
+
+Si id NO existe: Agrega {...producto, cantidad: 1}.
+
+Si id YA EXISTE: Suma 1 a cantidad.
+
+Si al restar llega a 0, elimina el producto del arreglo.
+
+LÓGICA DE IMPRESIÓN (PrintTicket.jsx)
+
+Componente oculto visible solo al imprimir (print:block hidden). Oculta el resto de la UI (print:hidden).
+
+Formato ticket 58mm (centrado, listas sin estilos, font monospace).
+
+Incluir: Don Peñolinni POS, Fecha/Hora, N° Orden aleatorio, lista de carrito y Total.
+
+Al presionar "Cobrar / Imprimir", ejecuta window.print(). Inmediatamente después (o usando window.onafterprint), vacía el estado del carrito simulando éxito.
+
+Entrégame el código completo y estructurado en los diferentes archivos solicitados.

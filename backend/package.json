@@ -1,0 +1,19 @@
+{
+  "name": "don-penolinni-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "seed": "node db/seed.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "^2.2.0",
+    "pizzeria-pos": "file:..",
+    "socket.io": "^4.8.1"
+  }
+}
