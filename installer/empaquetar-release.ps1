@@ -80,10 +80,24 @@ if ($Publicar) {
     Write-Host "== Publicando release v$Version en GitHub =="
     Push-Location $root
     git add -A
-    git commit -m "chore: release v$Version" --allow-empty-message -m "" 2>$null
-    git tag "v$Version"
+    $hayCambios = (git diff --cached --name-only)
+    if ($hayCambios) {
+        git commit -m "chore: release v$Version"
+        if ($LASTEXITCODE -ne 0) { throw "git commit fallo" }
+    } else {
+        Write-Host "  (sin cambios nuevos para commitear)"
+    }
+    if (git tag --list "v$Version") {
+        Write-Host "  El tag v$Version ya existe, se reutiliza."
+    } else {
+        git tag "v$Version"
+        if ($LASTEXITCODE -ne 0) { throw "git tag fallo" }
+    }
     git push origin HEAD
+    if ($LASTEXITCODE -ne 0) { throw "git push (commits) fallo" }
     git push origin "v$Version"
+    if ($LASTEXITCODE -ne 0) { throw "git push (tag) fallo" }
     gh release create "v$Version" $zipPath --title "v$Version" --notes "Version $Version"
+    if ($LASTEXITCODE -ne 0) { throw "gh release create fallo" }
     Pop-Location
 }
