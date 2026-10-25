@@ -283,7 +283,7 @@ function ModalVariantesInterno({ producto, onSeleccionar, onCerrar }) {
             className={`w-full min-h-[48px] rounded-xl text-base font-extrabold disabled:opacity-50 disabled:cursor-not-allowed ${focoCls}`}
             style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
-            Agregar · {formatCOP(precio)}
+            {esMitad && !opcionSegunda ? "Agregar" : `Agregar · ${formatCOP(precio)}`}
           </button>
         </div>
       </div>

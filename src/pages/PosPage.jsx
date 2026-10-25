@@ -122,6 +122,7 @@ export default function PosPage() {
   const [quiereMesa, setQuiereMesa] = useState(false);
   // Abrir el cobro implica facturar ahora.
   const abrirCobro = useCallback(() => { setFacturarAhorita(true); setCobroAbierto(true); }, []);
+  const cerrarCobro = useCallback(() => { setCobroAbierto(false); setFacturarAhorita(false); setMontoAbonar(""); }, []);
   const [mesas, setMesas] = useState([]);
 
   // Mesas para la cuadrícula del panel; si falla, queda solo el input manual.
@@ -325,7 +326,7 @@ export default function PosPage() {
     resetOrden();
   }, [cart.length, resetOrden]);
 
-  const procesarPedidoDB = async (estado) => {
+  const procesarPedidoDB = async (estado, registrarPago = false) => {
     const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
     const prop = conPropina ? Math.round(sub * 0.10) : 0;
     const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
@@ -372,7 +373,7 @@ export default function PosPage() {
 
     const saldoRestante = tot - montoPagadoHistorico;
     const abonoRaw = parseInt(String(montoAbonar).replace(/\D/g, ''));
-    const pago_actual = facturarAhorita ? (!isNaN(abonoRaw) ? abonoRaw : saldoRestante) : 0;
+    const pago_actual = (registrarPago && facturarAhorita) ? (!isNaN(abonoRaw) ? abonoRaw : saldoRestante) : 0;
 
     const pedido = {
       mesa_id: mesa ? parseInt(mesa, 10) : null,
@@ -402,7 +403,7 @@ export default function PosPage() {
 
     try {
       // 1. Guardar en BD. Si ya existe mantenemos su estado. Si es nuevo, 'pendiente' para que vaya a cocina.
-      await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente');
+      await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente', true);
 
       // 2. Imprimir recibo
       const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
@@ -676,7 +677,7 @@ export default function PosPage() {
           fechaHora={fechaHora} tipoPago={tipoPago} esDomicilio={esDomicilio}
           propina={propina} costoDomicilio={esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0}
           mesa={mesa} montoEntregado={tipoPago === 'efectivo' ? (parseInt(montoEntregado.toString().replace(/\D/g, '')) || 0) : 0} isCopia={false}
-          pagoActual={facturarAhorita ? (parseInt(String(montoAbonar).replace(/\D/g, '')) || (total - montoPagadoHistorico)) : 0} montoPagadoHistorico={montoPagadoHistorico} />
+          pagoActual={facturarAhorita ? (() => { const a = parseInt(String(montoAbonar).replace(/\D/g, '')); return !isNaN(a) ? a : (total - montoPagadoHistorico); })() : 0} montoPagadoHistorico={montoPagadoHistorico} />
       )}
 
       <ModalVariantes producto={productoVariante}
@@ -699,7 +700,7 @@ export default function PosPage() {
       {/* Modal QR */}
       <ModalCobro
         abierto={cobroAbierto}
-        onCerrar={() => setCobroAbierto(false)}
+        onCerrar={cerrarCobro}
         total={total}
         saldoRestante={total - montoPagadoHistorico}
         tipoPago={tipoPago} setTipoPago={setTipoPago}
@@ -797,7 +798,7 @@ export default function PosPage() {
               <input id="input-busqueda" type="text" placeholder="Buscar producto"
                 value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
                 aria-label="Buscar producto"
-                className="w-full pl-9 pr-9 py-2 rounded-xl text-sm outline-none transition-colors
+                className="w-full min-h-[44px] pl-9 pr-9 py-2 rounded-xl text-sm outline-none transition-colors
                            border border-[var(--border-2)] focus:border-[var(--accent)]"
                 style={{ background: 'var(--bg-surf6)', color: 'var(--text-1)' }} />
               <kbd className="hidden sm:block absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono
