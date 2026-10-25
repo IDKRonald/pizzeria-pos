@@ -10,11 +10,12 @@ import CartItem from './CartItem';
 const formatCOP = (valor) =>
   valor.toLocaleString('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
 
-const TIPOS_PAGO = [
-  { value: 'efectivo',        label: '💵 Efectivo' },
-  { value: 'transferencia',   label: '📲 Transferencia / Nequi' },
-  { value: 'tarjeta_debito',  label: '💳 Tarjeta Débito' },
-  { value: 'tarjeta_credito', label: '💳 Tarjeta Crédito' },
+// eslint-disable-next-line react-refresh/only-export-components -- lo reutiliza ModalCobro
+export const TIPOS_PAGO = [
+  { value: 'efectivo',        label: 'Efectivo',              icono: 'efectivo' },
+  { value: 'transferencia',   label: 'Transferencia / Nequi', icono: 'transferencia' },
+  { value: 'tarjeta_debito',  label: 'Tarjeta Débito',        icono: 'tarjeta' },
+  { value: 'tarjeta_credito', label: 'Tarjeta Crédito',       icono: 'tarjeta' },
 ];
 
 export default function CheckoutSidebar({
