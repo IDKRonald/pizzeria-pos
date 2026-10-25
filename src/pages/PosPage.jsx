@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto } from '../lib/api';
 import { useCajaAbierta } from '../hooks/useCajaAbierta';
+import { debeEnfocarBusqueda } from '../lib/venta';
 import ProductCard from '../components/ProductCard';
 import CheckoutSidebar from '../components/CheckoutSidebar';
 import TicketImpresion, { ETIQUETAS_PAGO } from '../components/TicketImpresion';
@@ -143,6 +144,16 @@ export default function PosPage() {
       hour: '2-digit', minute: '2-digit', second: '2-digit',
     })
   );
+
+  const [fechaHeader, setFechaHeader] = useState('');
+  useEffect(() => {
+    const actualizar = () => setFechaHeader(new Date().toLocaleString('es-CO', {
+      weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    }));
+    actualizar();
+    const id = setInterval(actualizar, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   /* ── Persistencia ── */
   useEffect(() => { localStorage.setItem(LS_CART,      JSON.stringify(cart));        }, [cart]);
@@ -471,6 +482,12 @@ export default function PosPage() {
     const focusables = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
     const onKey = (e) => {
+      // "/" enfoca el buscador (salvo que se esté escribiendo)
+      if (debeEnfocarBusqueda(e)) {
+        e.preventDefault();
+        document.getElementById('input-busqueda')?.focus();
+        return;
+      }
       const tag = e.target.tagName.toLowerCase();
       const isTextInput = tag === 'input' || tag === 'textarea';
       const isSelect = tag === 'select';
@@ -722,60 +739,62 @@ export default function PosPage() {
           <header className="flex items-center gap-3 px-4 sm:px-6 py-3 shrink-0 flex-wrap sm:flex-nowrap"
             style={{ background: 'var(--bg-surf1)', borderBottom: '1px solid var(--border-1)' }}>
 
-            {/* Botón volver + Logo */}
+            {/* Botón volver + marca */}
             <div className="flex items-center gap-2.5 shrink-0">
               <button onClick={() => navigate(mesaInfo ? '/mesas' : '/hub')}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center
+                className="w-9 h-9 rounded-xl flex items-center justify-center
                            text-sm transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
                 title={mesaInfo ? 'Volver al diagrama de mesas' : 'Volver al Hub'}
+                aria-label={mesaInfo ? 'Volver al diagrama de mesas' : 'Volver al Hub'}
               >←</button>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-orange-500 to-red-600
-                              flex items-center justify-center text-base sm:text-lg shadow-md">🍕</div>
-              <div className="hidden sm:block">
+              <div>
                 <h1 className="text-base font-extrabold tracking-tight leading-none"
-                  style={{ color: 'var(--text-1)' }}>Don Peñolinni POS</h1>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-4)' }}>Punto de Venta</p>
+                  style={{ color: 'var(--text-1)' }}>Don Peñolinni</h1>
+                <p className="hidden sm:block text-[11px] mt-0.5" style={{ color: 'var(--text-4)' }}>Punto de venta</p>
               </div>
-              <h1 className="sm:hidden text-sm font-extrabold" style={{ color: 'var(--text-1)' }}>
-                Don Peñolinni
-              </h1>
             </div>
 
-            {/* Buscador — crece para llenar espacio disponible */}
-            <div className="relative flex-1 min-w-[120px]">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm select-none"
-                style={{ color: 'var(--text-4)' }}>🔍</span>
-              <input id="input-busqueda" type="text" placeholder="Buscar…"
+            {/* Buscador — centro, crece para llenar espacio disponible */}
+            <div className="relative flex-1 min-w-[120px] max-w-xl mx-auto">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="16" height="16"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                style={{ color: 'var(--text-4)' }}>
+                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+              </svg>
+              <input id="input-busqueda" type="text" placeholder="Buscar producto"
                 value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
                 aria-label="Buscar producto"
-                className="w-full pl-9 pr-4 py-2 rounded-xl text-sm outline-none transition-all"
-                style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-1)' }}
-                onFocus={(e) => { e.target.style.borderColor = 'rgba(249,115,22,0.7)'; }}
-                onBlur={(e) => { e.target.style.borderColor = 'var(--border-2)'; }} />
+                className="w-full pl-9 pr-9 py-2 rounded-xl text-sm outline-none transition-colors
+                           border border-[var(--border-2)] focus:border-[var(--accent)]"
+                style={{ background: 'var(--bg-surf6)', color: 'var(--text-1)' }} />
+              <kbd className="hidden sm:block absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono
+                              px-1.5 rounded pointer-events-none"
+                style={{ color: 'var(--text-4)', border: '1px solid var(--border-2)' }}>/</kbd>
             </div>
 
             {/* Acciones de cabecera */}
             <div className="flex items-center gap-2 shrink-0 ml-auto">
-              <div className="hidden lg:block text-right">
-                <p className="text-xs" style={{ color: 'var(--text-3)' }}>{fechaHora}</p>
-                <p className="text-[11px]" style={{ color: 'var(--text-5)' }}>Bogotá D.C.</p>
-              </div>
-              
-              {ultimoRecibo && (
-                <button aria-label="Reimprimir último recibo" title="Reimprimir copia"
-                  onClick={handleReimprimir}
-                  className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl
-                             text-base font-bold transition-colors duration-150"
-                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
-                >
-                  🖨️
+              {usuario?.rol !== 'mesero' && (
+                <button onClick={() => setShowCuentas(true)}
+                  className="hidden sm:flex items-center px-3 min-h-[36px] rounded-xl text-sm font-semibold
+                             transition-colors duration-150 border border-[var(--border-2)] hover:border-[var(--accent)]"
+                  style={{ background: 'var(--bg-surf6)', color: 'var(--text-2)' }}>
+                  Pedidos abiertos
                 </button>
               )}
+              {ultimoRecibo && (
+                <button onClick={handleReimprimir}
+                  className="hidden lg:flex items-center px-3 min-h-[36px] rounded-xl text-sm font-semibold
+                             transition-colors duration-150 border border-[var(--border-2)] hover:border-[var(--accent)]"
+                  style={{ background: 'var(--bg-surf6)', color: 'var(--text-2)' }}>
+                  Reimprimir
+                </button>
+              )}
+              <p className="hidden lg:block text-xs capitalize" style={{ color: 'var(--text-3)' }}>
+                {fechaHeader}
+              </p>
               {ultimoRecibo && (
                 <button aria-label="Enviar última factura por WhatsApp" title="Enviar por WhatsApp"
                   onClick={handleEnviarWhatsApp}
@@ -796,16 +815,6 @@ export default function PosPage() {
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}>?</button>
-              {usuario?.rol !== 'mesero' && (
-                <button aria-label="Cuentas Abiertas" title="Cuentas Abiertas"
-                  onClick={() => setShowCuentas(true)}
-                  className="hidden sm:flex w-9 h-9 items-center justify-center rounded-xl text-lg transition-colors duration-150"
-                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}>
-                  🧾
-                </button>
-              )}
               {/* Botón QR — conectar dispositivo */}
               <button
                 id="btn-qr"
@@ -833,37 +842,31 @@ export default function PosPage() {
             </div>
           </header>
 
-          {/* ── Filtros de categoría ── */}
+          {/* ── Filtros de categoría (chips) ── */}
           <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3"
             style={{ background: 'var(--bg-surf5)', borderBottom: '1px solid var(--border-1)' }}>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {categoriasMenu.map((cat, idx) => {
                 const activo = categoriaActiva === cat.id;
+                const conteo = cat.id === 'Todos'
+                  ? menuProductos.length
+                  : menuProductos.filter((p) => p.categoria === cat.id).length;
                 return (
                   <button key={cat.id}
                     id={`filtro-${cat.id.toLowerCase().replace(/\s+/g, '-')}`}
-                    aria-label={`Filtrar por ${cat.id}`} aria-pressed={activo}
+                    aria-pressed={activo}
                     onClick={() => setCategoriaActiva(cat.id)}
                     title={idx < 9 ? `Atajo: tecla ${idx + 1}` : undefined}
-                    className="flex items-center gap-1.5 sm:gap-2
-                               px-3 sm:px-4 py-2 sm:py-2.5
-                               rounded-full text-xs sm:text-sm
-                               font-semibold whitespace-nowrap
-                               transition-all duration-150 touch-manipulation select-none"
+                    className="flex items-center gap-2 px-4 min-h-[44px] rounded-full text-sm
+                               font-semibold whitespace-nowrap shrink-0
+                               transition-colors duration-150 touch-manipulation select-none"
                     style={{
-                      minHeight: '36px',
-                      background: activo ? 'rgb(249,115,22)'          : 'transparent',
-                      border:     activo ? '1px solid rgb(249,115,22)' : '1px solid var(--border-2)',
-                      color:      activo ? '#fff'                      : 'var(--text-3)',
-                      boxShadow:  activo ? '0 2px 14px rgba(249,115,22,0.35)' : 'none',
+                      background: activo ? 'var(--accent)' : 'transparent',
+                      border:     activo ? '1px solid var(--accent)' : '1px solid var(--border-2)',
+                      color:      activo ? 'var(--on-accent)' : 'var(--text-3)',
                     }}>
-                    <span className="text-sm sm:text-base leading-none">{cat.emoji}</span>
-                    <span>{cat.id}</span>
-                    {idx < 9 && (
-                      <span className="hidden lg:inline text-[10px] opacity-40 font-mono">
-                        [{idx + 1}]
-                      </span>
-                    )}
+                    <span>{cat.id === 'Todos' ? 'Todas' : cat.id}</span>
+                    <span className="text-xs opacity-70">{conteo}</span>
                   </button>
                 );
               })}
