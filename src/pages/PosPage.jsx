@@ -2,12 +2,13 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto } from '../lib/api';
+import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto, getMesas } from '../lib/api';
 import { useCajaAbierta } from '../hooks/useCajaAbierta';
 import { debeEnfocarBusqueda } from '../lib/venta';
 import ProductCard from '../components/ProductCard';
 import CheckoutSidebar from '../components/CheckoutSidebar';
 import TicketImpresion, { ETIQUETAS_PAGO } from '../components/TicketImpresion';
+import ModalCobro from '../components/ModalCobro';
 import ModalVariantes from '../components/ModalVariantes';
 import ModalComboBebida from '../components/ModalComboBebida';
 import ModalCustomItem from '../components/ModalCustomItem';
@@ -116,6 +117,13 @@ export default function PosPage() {
   /* ── Checkout extra data ── */
   const [montoEntregado, setMontoEntregado] = useState('');
   const [facturarAhorita, setFacturarAhorita] = useState(false);
+  const [cobroAbierto, setCobroAbierto] = useState(false);
+  const [mesas, setMesas] = useState([]);
+
+  // Mesas para la cuadrícula del panel; si falla, queda solo el input manual.
+  useEffect(() => {
+    getMesas().then((r) => setMesas(Array.isArray(r) ? r : [])).catch(() => setMesas([]));
+  }, []);
   const [montoAbonar, setMontoAbonar] = useState('');
   const [montoPagadoHistorico, setMontoPagadoHistorico] = useState(0);
   const [estadoOriginal, setEstadoOriginal] = useState('pendiente');
@@ -416,10 +424,10 @@ export default function PosPage() {
           setIsReprinting(true);
           setTimeout(() => {
             window.print();
-            setTimeout(() => { setIsReprinting(false); resetOrden(); setIsProcesando(false); }, 100);
+            setTimeout(() => { setIsReprinting(false); resetOrden(); setCobroAbierto(false); setIsProcesando(false); }, 100);
           }, 150);
         } else {
-          setTimeout(() => { resetOrden(); setIsProcesando(false); }, 100);
+          setTimeout(() => { resetOrden(); setCobroAbierto(false); setIsProcesando(false); }, 100);
         }
       }, 100);
     } catch (err) {
@@ -427,7 +435,7 @@ export default function PosPage() {
       alert(err?.message || 'Error al guardar el pedido en la base de datos');
       setIsProcesando(false);
     }
-  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, imprimirCopia, enviarWhatsapp, montoEntregado, resetOrden, usuario]);
+  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, imprimirCopia, enviarWhatsapp, montoEntregado, resetOrden, usuario, facturarAhorita, montoAbonar, costoDomicilio, montoPagadoHistorico]);
 
   const handleEnviarCocina = useCallback(async () => {
     if (cart.length === 0 || isProcesando || edicionBloqueada) return;
@@ -482,6 +490,8 @@ export default function PosPage() {
     const focusables = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
     const onKey = (e) => {
+      // Con el modal de cobro abierto, el teclado es suyo (Esc y Tab los maneja él).
+      if (cobroAbierto) return;
       // "/" enfoca el buscador (salvo que se esté escribiendo)
       if (debeEnfocarBusqueda(e)) {
         e.preventDefault();
@@ -607,7 +617,7 @@ export default function PosPage() {
           break;
         case 'Enter': // Cobrar orden (si tienes foco general)
           if (!isProcesando && cart.length > 0 && !productoVariante) {
-            e.preventDefault(); handleCobrar();
+            e.preventDefault(); setCobroAbierto(true);
           }
           break;
         case '?': // Mostrar atajos
@@ -625,7 +635,7 @@ export default function PosPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCobrar, handleCancelar, showQR]);
+  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCancelar, showQR, cobroAbierto]);
 
   /* ── Filtrado ── */
   const productosFiltrados = useMemo(() =>
@@ -681,6 +691,21 @@ export default function PosPage() {
       )}
 
       {/* Modal QR */}
+      <ModalCobro
+        abierto={cobroAbierto}
+        onCerrar={() => setCobroAbierto(false)}
+        total={total}
+        saldoRestante={total - montoPagadoHistorico}
+        tipoPago={tipoPago} setTipoPago={setTipoPago}
+        esDomicilio={esDomicilio} costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+        facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
+        montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
+        montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
+        imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
+        enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
+        isProcesando={isProcesando}
+        onConfirmar={handleCobrar}
+      />
       {showQR && <ModalQR onCerrar={() => setShowQR(false)} />}
 
       {showCuentas && (
@@ -904,7 +929,7 @@ export default function PosPage() {
         <div className="hidden lg:flex lg:flex-col lg:h-screen lg:w-[340px] lg:min-w-[280px]">
           <CheckoutSidebar cart={cart} onIncrementar={handleIncrementar}
             onDecrementar={handleDecrementar} onCancelar={handleCancelar}
-            onCobrar={handleCobrar} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
+            onAbrirCobro={() => setCobroAbierto(true)} mesas={mesas} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
             tipoPago={tipoPago} setTipoPago={setTipoPago}
             esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
             costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
@@ -972,7 +997,8 @@ export default function PosPage() {
               onIncrementar={handleIncrementar}
               onDecrementar={handleDecrementar}
               onCancelar={handleCancelar}
-              onCobrar={handleCobrar}
+              onAbrirCobro={() => setCobroAbierto(true)}
+              mesas={mesas}
               onEnviarCocina={handleEnviarCocina}
               isProcesando={isProcesando}
               tipoPago={tipoPago} setTipoPago={setTipoPago}
