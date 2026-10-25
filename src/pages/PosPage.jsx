@@ -118,6 +118,10 @@ export default function PosPage() {
   const [montoEntregado, setMontoEntregado] = useState('');
   const [facturarAhorita, setFacturarAhorita] = useState(false);
   const [cobroAbierto, setCobroAbierto] = useState(false);
+  // "Mesa" elegida en el segmentado aunque todavía no haya número.
+  const [quiereMesa, setQuiereMesa] = useState(false);
+  // Abrir el cobro implica facturar ahora.
+  const abrirCobro = useCallback(() => { setFacturarAhorita(true); setCobroAbierto(true); }, []);
   const [mesas, setMesas] = useState([]);
 
   // Mesas para la cuadrícula del panel; si falla, queda solo el input manual.
@@ -263,7 +267,7 @@ export default function PosPage() {
   }, [edicionBloqueada]);
 
   const resetOrden = useCallback(() => {
-    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado('');
+    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado(''); setQuiereMesa(false);
     setFacturarAhorita(false); setMontoAbonar(''); setMontoPagadoHistorico(0); setEstadoOriginal('pendiente');
     setPedidoActivoId(null); setOrdenActivaNum(null); setModoEdicion(null); setMesaInfo(null);
   }, []);
@@ -273,6 +277,7 @@ export default function PosPage() {
     setPedidoActivoId(pedidoDB.id);
     setOrdenActivaNum(pedidoDB.numero_orden);
     setMesa(pedidoDB.mesa_id ? String(pedidoDB.mesa_id) : '');
+    setQuiereMesa(Boolean(pedidoDB.mesa_id));
     setEsDomicilio(pedidoDB.tipo === 'domicilio');
     setTipoPago(pedidoDB.metodo_pago || 'efectivo');
     setMontoPagadoHistorico(pedidoDB.monto_pagado || 0);
@@ -303,6 +308,7 @@ export default function PosPage() {
     } else if (st.mesaId) {
       resetOrden();
       setMesa(String(st.mesaId));
+      setQuiereMesa(true);
     }
 
     if (st.mesaId) {
@@ -611,13 +617,13 @@ export default function PosPage() {
           e.preventDefault();
           document.querySelector('[id^="btn-agregar-"]')?.focus();
           break;
-        case 'p': // Checkout sidebar
+        case 'p': // Abrir el cobro
           e.preventDefault();
-          document.getElementById('select-tipo-pago')?.focus();
+          if (!isProcesando && cart.length > 0 && !productoVariante && !edicionBloqueada && !cajaCerrada) abrirCobro();
           break;
         case 'Enter': // Cobrar orden (si tienes foco general)
-          if (!isProcesando && cart.length > 0 && !productoVariante) {
-            e.preventDefault(); setCobroAbierto(true);
+          if (!isProcesando && cart.length > 0 && !productoVariante && !edicionBloqueada && !cajaCerrada) {
+            e.preventDefault(); abrirCobro();
           }
           break;
         case '?': // Mostrar atajos
@@ -635,7 +641,7 @@ export default function PosPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCancelar, showQR, cobroAbierto]);
+  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCancelar, showQR, cobroAbierto, abrirCobro, edicionBloqueada, cajaCerrada]);
 
   /* ── Filtrado ── */
   const productosFiltrados = useMemo(() =>
@@ -929,19 +935,13 @@ export default function PosPage() {
         <div className="hidden lg:flex lg:flex-col lg:h-screen lg:w-[340px] lg:min-w-[280px]">
           <CheckoutSidebar cart={cart} onIncrementar={handleIncrementar}
             onDecrementar={handleDecrementar} onCancelar={handleCancelar}
-            onAbrirCobro={() => setCobroAbierto(true)} mesas={mesas} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
-            tipoPago={tipoPago} setTipoPago={setTipoPago}
+            onAbrirCobro={abrirCobro} quiereMesa={quiereMesa} setQuiereMesa={setQuiereMesa} mesas={mesas} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
             esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
             costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
             conPropina={conPropina} setConPropina={setConPropina}
             mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
-            imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
-            enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
-            montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
-            facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
-            montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
-            saldoRestante={total - montoPagadoHistorico} />
+            />
         </div>
       </div>
 
@@ -997,22 +997,15 @@ export default function PosPage() {
               onIncrementar={handleIncrementar}
               onDecrementar={handleDecrementar}
               onCancelar={handleCancelar}
-              onAbrirCobro={() => setCobroAbierto(true)}
+              onAbrirCobro={abrirCobro} quiereMesa={quiereMesa} setQuiereMesa={setQuiereMesa}
               mesas={mesas}
               onEnviarCocina={handleEnviarCocina}
               isProcesando={isProcesando}
-              tipoPago={tipoPago} setTipoPago={setTipoPago}
               esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
               costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
               conPropina={conPropina} setConPropina={setConPropina}
               mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
-              imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
-              enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
-              montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
-              facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
-              montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
-              saldoRestante={total - montoPagadoHistorico}
               isDrawer
               onCerrar={() => setCartDrawerOpen(false)}
             />

@@ -1,5 +1,4 @@
 // src/components/CheckoutSidebar.jsx
-import { useState } from 'react';
 import CartItem from './CartItem';
 import { formatCOP, parseMonto, tipoOrden, aplicarTipoOrden } from '../lib/venta';
 
@@ -51,6 +50,8 @@ export default function CheckoutSidebar({
   mesa,
   setMesa,
   mesas = [],
+  quiereMesa = false,
+  setQuiereMesa = () => {},
   mesaInfo = null,
   edicionBloqueada = false,
   cajaCerrada = false,
@@ -59,8 +60,7 @@ export default function CheckoutSidebar({
   isDrawer = false,
   onCerrar,
 }) {
-  // "Mesa" elegida sin número todavía: tipoOrden diría "llevar", así que se recuerda aquí.
-  const [quiereMesa, setQuiereMesa] = useState(false);
+  // quiereMesa vive en PosPage: "Mesa" elegida sin número todavía (tipoOrden diría "llevar").
   const tipoDeducido = tipoOrden({ esDomicilio, mesa });
   const tipo = tipoDeducido === 'llevar' && quiereMesa ? 'mesa' : tipoDeducido;
   const tipoBloqueado = Boolean(mesaInfo) || edicionBloqueada;
