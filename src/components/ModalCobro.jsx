@@ -81,6 +81,9 @@ export default function ModalCobro({
   enviarWhatsapp, setEnviarWhatsapp, isProcesando = false, onConfirmar,
 }) {
   const dialogoRef = useRef(null);
+  // Ref para que un onCerrar inline no reinicie el efecto de foco en cada render.
+  const cerrarRef = useRef(onCerrar);
+  useEffect(() => { cerrarRef.current = onCerrar; });
 
   // Al abrir: foco en el primer botón de pago; Esc cierra; Tab queda atrapado.
   useEffect(() => {
@@ -88,7 +91,7 @@ export default function ModalCobro({
     const previo = document.activeElement;
     dialogoRef.current?.querySelector('[data-pago]')?.focus();
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onCerrar(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); cerrarRef.current(); return; }
       if (e.key !== 'Tab' || !dialogoRef.current) return;
       const foco = [...dialogoRef.current.querySelectorAll(
         'button:not([disabled]), input:not([disabled])',
@@ -108,7 +111,7 @@ export default function ModalCobro({
       document.removeEventListener('keydown', onKeyDown, true);
       previo?.focus?.();
     };
-  }, [abierto, onCerrar]);
+  }, [abierto]);
 
   if (!abierto) return null;
 
@@ -123,9 +126,7 @@ export default function ModalCobro({
   return (
     <div
       className="no-print fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'var(--modal-overlay)' }}
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar(); }}
-    >
+      style={{ background: 'var(--modal-overlay)' }}    >
       <div
         ref={dialogoRef}
         role="dialog"
