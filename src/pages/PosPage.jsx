@@ -742,12 +742,12 @@ export default function PosPage() {
             {/* Botón volver + marca */}
             <div className="flex items-center gap-2.5 shrink-0">
               <button onClick={() => navigate(mesaInfo ? '/mesas' : '/hub')}
-                className="w-9 h-9 rounded-xl flex items-center justify-center
+                className="w-11 h-11 rounded-xl flex items-center justify-center
                            text-sm transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
                 title={mesaInfo ? 'Volver al diagrama de mesas' : 'Volver al Hub'}
                 aria-label={mesaInfo ? 'Volver al diagrama de mesas' : 'Volver al Hub'}
-              >←</button>
+              ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg></button>
               <div>
                 <h1 className="text-base font-extrabold tracking-tight leading-none"
                   style={{ color: 'var(--text-1)' }}>Don Peñolinni</h1>
@@ -778,7 +778,7 @@ export default function PosPage() {
             <div className="flex items-center gap-2 shrink-0 ml-auto">
               {usuario?.rol !== 'mesero' && (
                 <button onClick={() => setShowCuentas(true)}
-                  className="hidden sm:flex items-center px-3 min-h-[36px] rounded-xl text-sm font-semibold
+                  className="hidden sm:flex items-center px-3 min-h-[44px] rounded-xl text-sm font-semibold
                              transition-colors duration-150 border border-[var(--border-2)] hover:border-[var(--accent)]"
                   style={{ background: 'var(--bg-surf6)', color: 'var(--text-2)' }}>
                   Pedidos abiertos
@@ -786,7 +786,7 @@ export default function PosPage() {
               )}
               {ultimoRecibo && (
                 <button onClick={handleReimprimir}
-                  className="hidden lg:flex items-center px-3 min-h-[36px] rounded-xl text-sm font-semibold
+                  className="hidden lg:flex items-center px-3 min-h-[44px] rounded-xl text-sm font-semibold
                              transition-colors duration-150 border border-[var(--border-2)] hover:border-[var(--accent)]"
                   style={{ background: 'var(--bg-surf6)', color: 'var(--text-2)' }}>
                   Reimprimir
@@ -798,19 +798,19 @@ export default function PosPage() {
               {ultimoRecibo && (
                 <button aria-label="Enviar última factura por WhatsApp" title="Enviar por WhatsApp"
                   onClick={handleEnviarWhatsApp}
-                  className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl
+                  className="hidden lg:flex w-11 h-11 items-center justify-center rounded-xl
                              text-base font-bold transition-colors duration-150"
                   style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)' }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(34,197,94,0.6)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
                 >
-                  💬
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5Z" /></svg>
                 </button>
               )}
               {/* Botón atajos (solo desktop) */}
               <button id="btn-atajos" aria-label="Atajos de teclado" title="Atajos [?]"
                 onClick={() => setMostrarAtajos((v) => !v)}
-                className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl
+                className="hidden lg:flex w-11 h-11 items-center justify-center rounded-xl
                            text-sm font-bold transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
@@ -821,23 +821,23 @@ export default function PosPage() {
                 aria-label="Conectar dispositivo por QR"
                 title="Conectar tablet / celular"
                 onClick={() => setShowQR(true)}
-                className="w-9 h-9 flex items-center justify-center rounded-xl
+                className="w-11 h-11 flex items-center justify-center rounded-xl
                            text-base transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
               >
-                📡
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0" /><path d="M8.5 16a5 5 0 0 1 7 0" /><circle cx="12" cy="19" r="1" /></svg>
               </button>
               {/* Toggle tema */}
               <button id="btn-toggle-tema" aria-label="Cambiar tema"
                 onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-                className="w-9 h-9 flex items-center justify-center rounded-xl text-lg
+                className="w-11 h-11 flex items-center justify-center rounded-xl text-lg
                            transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}>
-                {theme === 'dark' ? '☀️' : '🌙'}
+                {theme === 'dark' ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>}
               </button>
             </div>
           </header>
