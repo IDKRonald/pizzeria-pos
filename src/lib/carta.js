@@ -68,3 +68,18 @@ export function tamanosSugeridos(productos, categoriaId) {
   const p = productos.find((x) => x.categoria_id === categoriaId && x.tiene_variantes && (x.variantes || []).length > 0);
   return p ? (p.variantes || []).map((v) => v.nombre_tamanio) : [];
 }
+
+/** Eliminación diferida con opción de deshacer; `ejecutar` corre una sola vez al vencer. */
+export function programarEliminacion({ ejecutar, ms = 6000, setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout }) {
+  let activo = true;
+  const id = setTimeoutFn(() => {
+    if (!activo) return;
+    activo = false;
+    ejecutar();
+  }, ms);
+  const cancelar = () => {
+    activo = false;
+    clearTimeoutFn(id);
+  };
+  return { deshacer: cancelar, cancelarSinEjecutar: cancelar };
+}

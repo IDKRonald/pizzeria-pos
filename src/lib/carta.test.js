@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  tieneFoto, urlImagen, parsePrecio, formatoMiles, validarFoto, filtrarProductos,
+  programarEliminacion, tieneFoto, urlImagen, parsePrecio, formatoMiles, validarFoto, filtrarProductos,
   contarPorCategoria, normalizarOrden, intercambiarOrden, tamanosSugeridos,
 } from './carta.js';
 
@@ -66,4 +66,34 @@ test('intercambiarOrden', () => {
 test('tamanosSugeridos', () => {
   assert.deepEqual(tamanosSugeridos(prods, 1), ['Personal', 'Grande']);
   assert.deepEqual(tamanosSugeridos(prods, 2), []);
+});
+
+function relojFalso() {
+  let cb = null; let borrado = false;
+  return {
+    setTimeoutFn: (f) => { cb = f; return 1; },
+    clearTimeoutFn: () => { borrado = true; cb = null; },
+    vencer: () => { if (cb && !borrado) cb(); },
+  };
+}
+
+test('programarEliminacion ejecuta una vez al vencer', () => {
+  const r = relojFalso(); let n = 0;
+  programarEliminacion({ ejecutar: async () => { n++; }, ...r });
+  r.vencer(); r.vencer();
+  assert.equal(n, 1);
+});
+
+test('programarEliminacion: deshacer evita la llamada', () => {
+  const r = relojFalso(); let n = 0;
+  const p = programarEliminacion({ ejecutar: async () => { n++; }, ...r });
+  p.deshacer(); r.vencer();
+  assert.equal(n, 0);
+});
+
+test('programarEliminacion: cancelarSinEjecutar evita la llamada', () => {
+  const r = relojFalso(); let n = 0;
+  const p = programarEliminacion({ ejecutar: async () => { n++; }, ...r });
+  p.cancelarSinEjecutar(); r.vencer();
+  assert.equal(n, 0);
 });
