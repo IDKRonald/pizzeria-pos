@@ -1,0 +1,228 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { useAuth } from '../context/AuthContext';
+import { actualizarProducto, getCategorias, getProductosAdmin } from '../lib/api';
+import { contarPorCategoria, filtrarProductos, tieneFoto } from '../lib/carta';
+import Aviso from '../components/carta/Aviso';
+import TarjetaProducto from '../components/carta/TarjetaProducto';
+
+const foco = 'focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]';
+
+const IconoAtras = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M15 5l-7 7 7 7" />
+  </svg>
+);
+const IconoMas = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+const IconoBuscar = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+    <circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" />
+  </svg>
+);
+
+function Chip({ activo, onClick, children, conteo }) {
+  return (
+    <button type="button" aria-pressed={activo} onClick={onClick}
+      className={`flex items-center gap-2 px-4 min-h-[44px] rounded-full text-sm font-semibold whitespace-nowrap shrink-0
+                  transition-colors touch-manipulation select-none cursor-pointer ${foco}`}
+      style={{
+        background: activo ? 'var(--accent)' : 'transparent',
+        border: activo ? '1px solid var(--accent)' : '1px solid var(--border-2)',
+        color: activo ? 'var(--on-accent)' : 'var(--text-3)',
+      }}>
+      <span>{children}</span>
+      <span className="text-xs opacity-70">{conteo}</span>
+    </button>
+  );
+}
+
+export default function CartaPage() {
+  const navigate = useNavigate();
+  const { usuario } = useAuth();
+
+  const [productos, setProductos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [vista, setVista] = useState('productos'); // 'productos' | 'categorias' (Task 6: ListaCategorias)
+  const [categoriaId, setCategoriaId] = useState(null);
+  const [texto, setTexto] = useState('');
+  const [soloSinFoto, setSoloSinFoto] = useState(false);
+  const [editandoId, setEditandoId] = useState(null); // Task 4: EditorProducto + eliminar
+  const [asistenteAbierto, setAsistenteAbierto] = useState(false); // Task 5: AsistenteProducto
+  const [aviso, setAviso] = useState(null);
+
+  const avisar = useCallback((texto, accion) => setAviso({ texto, accion }), []);
+  const avisarError = useCallback((msg) => avisar(msg || 'No se pudo guardar'), [avisar]);
+
+  /** Vuelve a pedir productos y categorías al backend. */
+  const recargar = useCallback(async () => {
+    try {
+      const [ps, cs] = await Promise.all([getProductosAdmin(), getCategorias()]);
+      setProductos(ps);
+      setCategorias(cs);
+    } catch (e) {
+      avisarError(e?.message || 'No se pudo cargar la carta');
+    } finally {
+      setCargando(false);
+    }
+  }, [avisarError]);
+
+  useEffect(() => { recargar(); }, [recargar]);
+
+  /** Aplica cambios a un producto solo en el estado local. */
+  const actualizarLocal = useCallback((id, cambios) => {
+    setProductos((ps) => ps.map((p) => (p.id === id ? { ...p, ...cambios } : p)));
+  }, []);
+
+  /** Cambio optimista: aplica, guarda y revierte si falla. */
+  const guardarOptimista = useCallback(async (producto, cambios, textoOk) => {
+    const previo = Object.fromEntries(Object.keys(cambios).map((k) => [k, producto[k]]));
+    actualizarLocal(producto.id, cambios);
+    try {
+      await actualizarProducto(producto.id, cambios, usuario.id);
+      if (textoOk) avisar(textoOk);
+    } catch (e) {
+      actualizarLocal(producto.id, previo);
+      avisarError(e?.message);
+    }
+  }, [actualizarLocal, avisar, avisarError, usuario.id]);
+
+  const categoriasOrdenadas = useMemo(
+    () => [...categorias].sort((a, b) => a.orden - b.orden || a.id - b.id),
+    [categorias],
+  );
+  const conteos = useMemo(() => contarPorCategoria(productos), [productos]);
+  const sinFoto = useMemo(() => productos.filter((p) => !tieneFoto(p.imagen)).length, [productos]);
+  const visibles = useMemo(
+    () => filtrarProductos(productos, { categoriaId, texto, soloSinFoto }),
+    [productos, categoriaId, texto, soloSinFoto],
+  );
+
+  return (
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-main)', color: 'var(--text-1)' }}>
+      <header className="flex items-center justify-between gap-3 flex-wrap px-4 sm:px-6 py-3"
+        style={{ background: 'var(--bg-surf1)', borderBottom: '1px solid var(--border-1)' }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <button type="button" onClick={() => navigate('/hub')} aria-label="Volver al inicio"
+            className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl cursor-pointer
+                        border border-[var(--border-1)] text-[var(--text-2)] ${foco}`}
+            style={{ background: 'var(--bg-surf2)' }}>
+            <IconoAtras />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-lg font-extrabold leading-none">Carta</h1>
+            <p className="text-xs mt-1 text-[var(--text-3)]">Lo que se vende, con su foto y su precio</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div role="tablist" aria-label="Vista" className="flex rounded-xl p-1 border border-[var(--border-1)]"
+            style={{ background: 'var(--bg-surf2)' }}>
+            {[['productos', 'Productos'], ['categorias', 'Categorías']].map(([id, etiqueta]) => (
+              <button key={id} type="button" role="tab" aria-selected={vista === id} onClick={() => setVista(id)}
+                className={`min-h-[40px] px-4 rounded-lg text-sm font-semibold cursor-pointer touch-manipulation ${foco}`}
+                style={{
+                  background: vista === id ? 'var(--bg-surf7)' : 'transparent',
+                  color: vista === id ? 'var(--text-1)' : 'var(--text-3)',
+                }}>
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setAsistenteAbierto(true)}
+            className={`flex items-center gap-2 min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer touch-manipulation ${foco}`}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+            <IconoMas /> Nuevo producto
+          </button>
+        </div>
+      </header>
+
+      {vista === 'categorias' ? (
+        <main className="flex-1 p-4 sm:p-6">
+          {/* Task 6: ListaCategorias */}
+          <p className="text-sm text-[var(--text-3)]">Categorías: próximamente.</p>
+        </main>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 px-4 sm:px-6 py-3"
+            style={{ background: 'var(--bg-surf5)', borderBottom: '1px solid var(--border-1)' }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="relative flex-1 min-w-[200px]">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-4)]"><IconoBuscar /></span>
+                <input type="search" value={texto} onChange={(e) => setTexto(e.target.value)}
+                  placeholder="Buscar producto" aria-label="Buscar producto"
+                  className={`w-full min-h-[44px] pl-10 pr-3 rounded-xl text-sm border border-[var(--border-1)] text-[var(--text-1)] ${foco}`}
+                  style={{ background: 'var(--bg-surf6)' }} />
+              </label>
+              <Chip activo={soloSinFoto} onClick={() => setSoloSinFoto((v) => !v)} conteo={sinFoto}>Sin foto</Chip>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <Chip activo={categoriaId === null} onClick={() => setCategoriaId(null)} conteo={productos.length}>Todas</Chip>
+              {categoriasOrdenadas.map((c) => (
+                <Chip key={c.id} activo={categoriaId === c.id} onClick={() => setCategoriaId(c.id)} conteo={conteos[c.id] || 0}>
+                  {c.nombre}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-4">
+            {sinFoto > 0 && !soloSinFoto && (
+              <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl pl-4 pr-2 py-1 border border-[var(--border-1)]"
+                style={{ background: 'var(--bg-surf2)' }}>
+                <p className="text-sm py-2 text-[var(--text-2)]">
+                  {`${sinFoto} ${sinFoto === 1 ? 'producto no tiene' : 'productos no tienen'} foto. Arrastra una foto encima de la tarjeta o tócala.`}
+                </p>
+                <button type="button" onClick={() => setSoloSinFoto(true)}
+                  className={`min-h-[44px] px-3 text-sm font-semibold cursor-pointer text-[var(--accent)] ${foco}`}>
+                  Ver cuáles
+                </button>
+              </div>
+            )}
+
+            {cargando ? (
+              <p className="text-sm text-[var(--text-3)]">Cargando carta…</p>
+            ) : visibles.length === 0 ? (
+              <p className="text-sm text-center py-12 text-[var(--text-3)]">No hay productos con ese filtro.</p>
+            ) : (
+              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                {visibles.map((p) => (
+                  <TarjetaProducto
+                    key={p.id}
+                    producto={p}
+                    seleccionado={editandoId === p.id}
+                    onEditar={() => setEditandoId(p.id)}
+                    onFotoSubida={(url) => guardarOptimista(p, { imagen: url }, 'Foto guardada')}
+                    onGuardarPrecio={(precio) => guardarOptimista(p, { precio })}
+                    onToggleVisible={() => guardarOptimista(p, { activo: p.activo ? 0 : 1 }, p.activo ? `${p.nombre} oculto en la venta` : null)}
+                    onError={avisarError}
+                  />
+                ))}
+              </div>
+            )}
+          </main>
+        </>
+      )}
+
+      {/* Task 4: <EditorProducto editandoId={editandoId} ... recargar actualizarLocal /> */}
+      {/* Task 5: <AsistenteProducto abierto={asistenteAbierto} ... /> */}
+      {asistenteAbierto && (
+        <div role="dialog" aria-modal="true" aria-label="Nuevo producto"
+          className="fixed inset-0 z-40 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl p-6 flex flex-col gap-4 border border-[var(--border-1)]" style={{ background: 'var(--bg-surf2)' }}>
+            <p className="text-sm">Nuevo producto: próximamente.</p>
+            <button type="button" onClick={() => setAsistenteAbierto(false)}
+              className={`min-h-[44px] px-4 rounded-xl text-sm font-semibold border border-[var(--border-1)] cursor-pointer ${foco}`}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Aviso aviso={aviso} onCerrar={() => setAviso(null)} />
+    </div>
+  );
+}

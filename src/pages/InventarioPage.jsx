@@ -7,7 +7,6 @@ import TabMovimientos from '../components/inventario/TabMovimientos';
 import TabRecetas from '../components/inventario/TabRecetas';
 import TabCombos from '../components/inventario/TabCombos';
 import TabImportarExcel from '../components/inventario/TabImportarExcel';
-import TabCarta from '../components/inventario/TabCarta';
 import TabSugerenciaCompra from '../components/inventario/TabSugerenciaCompra';
 import TabSistema from '../components/inventario/TabSistema';
 
@@ -18,7 +17,6 @@ const TABS = [
   { id: 'movimientos', label: 'Movimientos', emoji: '📜' },
   { id: 'recetas',     label: 'Recetas',     emoji: '🧾' },
   { id: 'combos',      label: 'Combos',      emoji: '🍔' },
-  { id: 'carta',       label: 'Carta',       emoji: '🍕' },
   { id: 'importar',    label: 'Importar Excel', emoji: '📥' },
   { id: 'sistema',     label: 'Sistema',     emoji: '⚙️' },
 ];
@@ -71,7 +69,6 @@ export default function InventarioPage() {
         {tabActiva === 'movimientos' && <TabMovimientos />}
         {tabActiva === 'recetas' && <TabRecetas />}
         {tabActiva === 'combos' && <TabCombos />}
-        {tabActiva === 'carta' && <TabCarta />}
         {tabActiva === 'importar' && <TabImportarExcel />}
         {tabActiva === 'sistema' && <TabSistema />}
       </main>

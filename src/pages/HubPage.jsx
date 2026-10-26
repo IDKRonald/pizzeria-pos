@@ -46,6 +46,16 @@ const MODULOS = [
     roles: ['admin', 'cajero', 'mesero', 'cocina'],
   },
   {
+    id: 'carta',
+    titulo: 'Carta',
+    desc: 'Fotos, precios y categorías',
+    emoji: '🍕',
+    ruta: '/carta',
+    color: 'from-orange-500 to-orange-700',
+    shadow: 'rgba(244,122,42,0.25)',
+    roles: ['admin'],
+  },
+  {
     id: 'inventario',
     titulo: 'Inventario',
     desc: 'Stock, insumos y proveedores',
