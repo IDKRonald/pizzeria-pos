@@ -1,12 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /** Aviso fijo abajo al centro; se oculta solo a los 6 s. */
 export default function Aviso({ aviso, onCerrar }) {
+  const cerrarRef = useRef(onCerrar);
+  useEffect(() => { cerrarRef.current = onCerrar; });
   useEffect(() => {
     if (!aviso) return undefined;
-    const t = setTimeout(onCerrar, 6000);
+    const t = setTimeout(() => cerrarRef.current(), 6000);
     return () => clearTimeout(t);
-  }, [aviso, onCerrar]);
+  }, [aviso]);
 
   if (!aviso) return null;
   return (

@@ -17,19 +17,18 @@ export default function ZonaFoto({ imagen, nombre, variante, onSubida, onError }
   const camaraRef = useRef(null);
   const [arrastrando, setArrastrando] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
-  const [fallo, setFallo] = useState(false);
+  const [fallo, setFallo] = useState(null);
   const editor = variante === 'editor';
-  const hayFoto = tieneFoto(imagen) && !fallo;
+  const hayFoto = tieneFoto(imagen) && fallo !== imagen;
 
   const procesar = async (file) => {
-    if (!file) return;
+    if (!file || subiendo) return;
     const msg = validarFoto(file);
     if (msg) { onError(msg); return; }
     setSubiendo(true);
     try {
       const { url } = await subirImagenProducto(file);
-      setFallo(false);
-      onSubida(url);
+            onSubida(url);
     } catch (e) {
       onError(e?.message || 'No se pudo subir la foto');
     } finally {
@@ -55,7 +54,7 @@ export default function ZonaFoto({ imagen, nombre, variante, onSubida, onError }
     <div className="flex flex-col gap-2">
       <div
         onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
-        onDragLeave={() => setArrastrando(false)}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setArrastrando(false); }}
         onDrop={alSoltar}
         className={`relative w-full overflow-hidden rounded-xl ${editor ? 'aspect-[16/10]' : 'aspect-[4/3]'}`}
         style={{
@@ -64,7 +63,7 @@ export default function ZonaFoto({ imagen, nombre, variante, onSubida, onError }
         }}
       >
         {hayFoto && (
-          <img src={urlImagen(imagen)} alt="" onError={() => setFallo(true)} className="w-full h-full object-cover" />
+          <img src={urlImagen(imagen)} alt="" onError={() => setFallo(imagen)} className="w-full h-full object-cover" />
         )}
         {!hayFoto && (
           <button
@@ -81,7 +80,7 @@ export default function ZonaFoto({ imagen, nombre, variante, onSubida, onError }
           </button>
         )}
         {subiendo && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm font-semibold"
+          <div role="status" className="absolute inset-0 flex items-center justify-center text-sm font-semibold"
             style={{ background: 'var(--bg-surf2)', color: 'var(--text-1)', opacity: 0.9 }}>
             Subiendo…
           </div>

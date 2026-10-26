@@ -97,3 +97,11 @@ test('programarEliminacion: cancelarSinEjecutar evita la llamada', () => {
   p.cancelarSinEjecutar(); r.vencer();
   assert.equal(n, 0);
 });
+
+test('programarEliminacion: si ejecutar falla llama onError', async () => {
+  const r = relojFalso(); const errs = [];
+  programarEliminacion({ ejecutar: async () => { throw new Error('x'); }, onError: (e) => errs.push(e.message), ...r });
+  r.vencer();
+  await new Promise((res) => setTimeout(res, 0));
+  assert.deepEqual(errs, ['x']);
+});

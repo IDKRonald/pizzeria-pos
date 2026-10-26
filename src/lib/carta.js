@@ -70,12 +70,12 @@ export function tamanosSugeridos(productos, categoriaId) {
 }
 
 /** Eliminación diferida con opción de deshacer; `ejecutar` corre una sola vez al vencer. */
-export function programarEliminacion({ ejecutar, ms = 6000, setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout }) {
+export function programarEliminacion({ ejecutar, ms = 6000, setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout, onError = () => {} }) {
   let activo = true;
   const id = setTimeoutFn(() => {
     if (!activo) return;
     activo = false;
-    ejecutar();
+    Promise.resolve().then(ejecutar).catch(onError);
   }, ms);
   const cancelar = () => {
     activo = false;
