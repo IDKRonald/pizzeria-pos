@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { actualizarProducto, eliminarProducto, getCategorias, getProductosAdmin } from '../lib/api';
 import { contarPorCategoria, filtrarProductos, programarEliminacion, tieneFoto } from '../lib/carta';
 import EditorProducto from '../components/carta/EditorProducto';
+import AsistenteProducto from '../components/carta/AsistenteProducto';
 import Aviso from '../components/carta/Aviso';
 import TarjetaProducto from '../components/carta/TarjetaProducto';
 
@@ -269,18 +270,22 @@ export default function CartaPage() {
           onError={avisarError}
         />
       )}
-      {/* Task 5: <AsistenteProducto abierto={asistenteAbierto} ... /> */}
       {asistenteAbierto && (
-        <div role="dialog" aria-modal="true" aria-label="Nuevo producto"
-          className="fixed inset-0 z-40 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="rounded-2xl p-6 flex flex-col gap-4 border border-[var(--border-1)]" style={{ background: 'var(--bg-surf2)' }}>
-            <p className="text-sm">Nuevo producto: próximamente.</p>
-            <button type="button" onClick={() => setAsistenteAbierto(false)}
-              className={`min-h-[44px] px-4 rounded-xl text-sm font-semibold border border-[var(--border-1)] cursor-pointer ${foco}`}>
-              Cerrar
-            </button>
-          </div>
-        </div>
+        <AsistenteProducto
+          categorias={categoriasOrdenadas}
+          productos={productos}
+          categoriaInicial={categoriaId}
+          onCreado={async (p) => {
+            setAsistenteAbierto(false);
+            setCategoriaId(p.categoria_id);
+            setTexto('');
+            setSoloSinFoto(false);
+            await recargar();
+            avisar(`Agregado a la carta · ${p.nombre}`);
+          }}
+          onCerrar={() => setAsistenteAbierto(false)}
+          onError={avisarError}
+        />
       )}
 
       <Aviso aviso={aviso} onCerrar={() => setAviso(null)} />
