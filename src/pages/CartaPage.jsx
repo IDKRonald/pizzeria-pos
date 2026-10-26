@@ -6,6 +6,7 @@ import { contarPorCategoria, filtrarProductos, programarEliminacion, tieneFoto }
 import EditorProducto from '../components/carta/EditorProducto';
 import AsistenteProducto from '../components/carta/AsistenteProducto';
 import Aviso from '../components/carta/Aviso';
+import ListaCategorias from '../components/carta/ListaCategorias';
 import TarjetaProducto from '../components/carta/TarjetaProducto';
 
 const foco = 'focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]';
@@ -175,7 +176,7 @@ export default function CartaPage() {
             style={{ background: 'var(--bg-surf2)' }}>
             {[['productos', 'Productos'], ['categorias', 'Categorías']].map(([id, etiqueta]) => (
               <button key={id} type="button" role="tab" aria-selected={vista === id} onClick={() => setVista(id)}
-                className={`min-h-[40px] px-4 rounded-lg text-sm font-semibold cursor-pointer touch-manipulation ${foco}`}
+                className={`min-h-[44px] px-4 rounded-lg text-sm font-semibold cursor-pointer touch-manipulation ${foco}`}
                 style={{
                   background: vista === id ? 'var(--bg-surf7)' : 'transparent',
                   color: vista === id ? 'var(--text-1)' : 'var(--text-3)',
@@ -194,8 +195,13 @@ export default function CartaPage() {
 
       {vista === 'categorias' ? (
         <main className="flex-1 p-4 sm:p-6">
-          {/* Task 6: ListaCategorias */}
-          <p className="text-sm text-[var(--text-3)]">Categorías: próximamente.</p>
+          <ListaCategorias
+            categorias={categorias}
+            conteo={conteos}
+            onRecargar={recargar}
+            onAviso={(t, a) => (t ? avisar(t, a) : setAviso(null))}
+            usuarioId={usuario.id}
+          />
         </main>
       ) : (
         <>
