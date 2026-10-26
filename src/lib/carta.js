@@ -75,7 +75,7 @@ export function programarEliminacion({ ejecutar, ms = 6000, setTimeoutFn = setTi
   const id = setTimeoutFn(() => {
     if (!activo) return;
     activo = false;
-    Promise.resolve().then(ejecutar).catch(onError);
+    new Promise((res) => res(ejecutar())).catch(onError);
   }, ms);
   const cancelar = () => {
     activo = false;
