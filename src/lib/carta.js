@@ -29,7 +29,7 @@ export function validarFoto(file) {
   return null;
 }
 
-const normalizar = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const normalizar = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 export function filtrarProductos(productos, { categoriaId, texto, soloSinFoto }) {
   const q = normalizar(texto).trim();
