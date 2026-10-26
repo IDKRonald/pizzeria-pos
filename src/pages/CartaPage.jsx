@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { actualizarProducto, getCategorias, getProductosAdmin } from '../lib/api';
-import { contarPorCategoria, filtrarProductos, tieneFoto } from '../lib/carta';
+import { actualizarProducto, eliminarProducto, getCategorias, getProductosAdmin } from '../lib/api';
+import { contarPorCategoria, filtrarProductos, programarEliminacion, tieneFoto } from '../lib/carta';
+import EditorProducto from '../components/carta/EditorProducto';
 import Aviso from '../components/carta/Aviso';
 import TarjetaProducto from '../components/carta/TarjetaProducto';
 
@@ -90,6 +91,56 @@ export default function CartaPage() {
       avisarError(e?.message);
     }
   }, [actualizarLocal, avisar, avisarError, usuario.id]);
+
+  // Eliminaciones diferidas pendientes; al desmontar se cancelan sin enviar el DELETE.
+  const pendientesRef = useRef(new Map());
+  useEffect(() => {
+    const pendientes = pendientesRef.current;
+    return () => {
+      pendientes.forEach((e) => e.cancelarSinEjecutar());
+      pendientes.clear();
+    };
+  }, []);
+
+  /** Devuelve el producto a la lista (si no está ya). */
+  const restaurar = useCallback((producto) => {
+    setProductos((ps) => (ps.some((p) => p.id === producto.id) ? ps : [...ps, producto]));
+  }, []);
+
+  const eliminar = useCallback((producto) => {
+    const { id } = producto;
+    setEditandoId(null);
+    setProductos((ps) => ps.filter((p) => p.id !== id));
+    const elim = programarEliminacion({
+      ejecutar: async () => {
+        pendientesRef.current.delete(id);
+        await eliminarProducto(id, usuario.id);
+      },
+      onError: (e) => {
+        restaurar(producto);
+        if (e?.status === 409 || /venta/i.test(e?.message || '')) {
+          avisar('Tiene ventas registradas, así que no se puede borrar. Puedes ocultarlo de la venta.', {
+            etiqueta: 'Ocultar',
+            onClick: () => { setAviso(null); guardarOptimista(producto, { activo: 0 }, `${producto.nombre} oculto en la venta`); },
+          });
+        } else {
+          avisarError(e?.message || 'No se pudo eliminar');
+        }
+      },
+    });
+    pendientesRef.current.set(id, elim);
+    avisar(`Producto eliminado · ${producto.nombre}`, {
+      etiqueta: 'Deshacer',
+      onClick: () => {
+        elim.deshacer();
+        pendientesRef.current.delete(id);
+        restaurar(producto);
+        setAviso(null);
+      },
+    });
+  }, [avisar, avisarError, guardarOptimista, restaurar, usuario.id]);
+
+  const editando = useMemo(() => productos.find((p) => p.id === editandoId) || null, [productos, editandoId]);
 
   const categoriasOrdenadas = useMemo(
     () => [...categorias].sort((a, b) => a.orden - b.orden || a.id - b.id),
@@ -207,7 +258,17 @@ export default function CartaPage() {
         </>
       )}
 
-      {/* Task 4: <EditorProducto editandoId={editandoId} ... recargar actualizarLocal /> */}
+      {editando && (
+        <EditorProducto
+          key={editando.id}
+          producto={editando}
+          categorias={categoriasOrdenadas}
+          onCambio={actualizarLocal}
+          onCerrar={() => setEditandoId(null)}
+          onEliminar={eliminar}
+          onError={avisarError}
+        />
+      )}
       {/* Task 5: <AsistenteProducto abierto={asistenteAbierto} ... /> */}
       {asistenteAbierto && (
         <div role="dialog" aria-modal="true" aria-label="Nuevo producto"
