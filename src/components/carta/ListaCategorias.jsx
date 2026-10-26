@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { actualizarCategoria, crearCategoria, eliminarCategoria } from '../../lib/api';
-import { intercambiarOrden, normalizarOrden, programarEliminacion } from '../../lib/carta';
+import { actualizarCategoria, crearCategoria } from '../../lib/api';
+import { intercambiarOrden, normalizarOrden } from '../../lib/carta';
 
 const foco = 'focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]';
 const btnIcono = `min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl cursor-pointer touch-manipulation
@@ -10,7 +10,7 @@ const Svg = ({ children, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 );
 
-function FilaCategoria({ cat, indice, total, conteo, onGuardarNombre, onMover, onEliminar, nueva, onCrear }) {
+function FilaCategoria({ cat, indice, total, conteo, onGuardarNombre, onMover, onEliminar, nueva, onCrear, moviendo }) {
   const [nombre, setNombre] = useState(cat.nombre);
   const [prev, setPrev] = useState(cat.nombre);
   if (prev !== cat.nombre) { setPrev(cat.nombre); setNombre(cat.nombre); }
@@ -30,7 +30,7 @@ function FilaCategoria({ cat, indice, total, conteo, onGuardarNombre, onMover, o
         <Svg><circle cx="9" cy="6" r="1" /><circle cx="15" cy="6" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="9" cy="18" r="1" /><circle cx="15" cy="18" r="1" /></Svg>
       </span>
       <label className="flex-1 min-w-0">
-        <span className="sr-only">Nombre de la categoría</span>
+        <span className="sr-only">Nombre de la categoría {indice + 1}</span>
         <input ref={ref} value={nombre} onChange={(e) => setNombre(e.target.value)} onBlur={alSalir}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           placeholder={nueva ? 'Nombre de la categoría' : undefined}
@@ -40,10 +40,10 @@ function FilaCategoria({ cat, indice, total, conteo, onGuardarNombre, onMover, o
       {!nueva && (
         <>
           <span className="text-sm text-[var(--text-3)] whitespace-nowrap">{conteo} {conteo === 1 ? 'producto' : 'productos'}</span>
-          <button type="button" className={btnIcono} aria-label={`Subir ${cat.nombre}`} disabled={indice === 0} onClick={() => onMover(indice, -1)}>
+          <button type="button" className={btnIcono} aria-label={`Subir ${cat.nombre}`} disabled={moviendo || indice === 0} onClick={() => onMover(indice, -1)}>
             <Svg><path d="M12 19V5M5 12l7-7 7 7" /></Svg>
           </button>
-          <button type="button" className={btnIcono} aria-label={`Bajar ${cat.nombre}`} disabled={indice === total - 1} onClick={() => onMover(indice, 1)}>
+          <button type="button" className={btnIcono} aria-label={`Bajar ${cat.nombre}`} disabled={moviendo || indice === total - 1} onClick={() => onMover(indice, 1)}>
             <Svg><path d="M12 5v14M5 12l7 7 7-7" /></Svg>
           </button>
           <button type="button" onClick={() => onEliminar(cat)}
@@ -56,16 +56,10 @@ function FilaCategoria({ cat, indice, total, conteo, onGuardarNombre, onMover, o
   );
 }
 
-export default function ListaCategorias({ categorias, conteo, onRecargar, onAviso, usuarioId }) {
-  const [ocultas, setOcultas] = useState([]);
+export default function ListaCategorias({ categorias, conteo, ocultas, onEliminar, onRecargar, onAviso, usuarioId }) {
+  const [moviendo, setMoviendo] = useState(false);
   const [nueva, setNueva] = useState(false);
-  const pendientes = useRef(new Map());
   const trabajando = useRef(false);
-
-  useEffect(() => {
-    const p = pendientes.current;
-    return () => { p.forEach((e) => e.cancelarSinEjecutar()); p.clear(); };
-  }, []);
 
   const ordenadas = useMemo(
     () => [...categorias].filter((c) => !ocultas.includes(c.id)).sort((a, b) => a.orden - b.orden || a.id - b.id),
@@ -85,6 +79,7 @@ export default function ListaCategorias({ categorias, conteo, onRecargar, onAvis
   const mover = async (indice, dir) => {
     if (trabajando.current) return;
     trabajando.current = true;
+    setMoviendo(true);
     try {
       const cambios = normalizarOrden(ordenadas);
       const mapa = new Map(cambios.map((c) => [c.id, c.orden]));
@@ -96,33 +91,9 @@ export default function ListaCategorias({ categorias, conteo, onRecargar, onAvis
       onAviso(e?.message || 'No se pudo guardar');
     } finally {
       trabajando.current = false;
+      setMoviendo(false);
       await onRecargar();
     }
-  };
-
-  const eliminar = (cat) => {
-    const n = conteo[cat.id] || 0;
-    if (n > 0) {
-      onAviso(`“${cat.nombre}” tiene ${n} ${n === 1 ? 'producto' : 'productos'}. Muévelos a otra categoría antes de eliminarla.`);
-      return;
-    }
-    const { id } = cat;
-    setOcultas((o) => [...o, id]);
-    const mostrar = () => setOcultas((o) => o.filter((x) => x !== id));
-    const elim = programarEliminacion({
-      ejecutar: async () => {
-        pendientes.current.delete(id);
-        await eliminarCategoria(id, usuarioId);
-        await onRecargar();
-        mostrar();
-      },
-      onError: (e) => { mostrar(); onAviso(e?.message || 'No se pudo eliminar'); },
-    });
-    pendientes.current.set(id, elim);
-    onAviso(`Categoría eliminada · ${cat.nombre}`, {
-      etiqueta: 'Deshacer',
-      onClick: () => { elim.deshacer(); pendientes.current.delete(id); mostrar(); onAviso(null); },
-    });
   };
 
   const crear = async (nombre) => {
@@ -153,7 +124,7 @@ export default function ListaCategorias({ categorias, conteo, onRecargar, onAvis
       <ol className="flex flex-col gap-2 list-decimal pl-7 marker:text-[var(--text-3)] marker:font-semibold">
         {ordenadas.map((c, i) => (
           <FilaCategoria key={c.id} cat={c} indice={i} total={ordenadas.length} conteo={conteo[c.id] || 0}
-            onGuardarNombre={guardarNombre} onMover={mover} onEliminar={eliminar} />
+            onGuardarNombre={guardarNombre} onMover={mover} onEliminar={onEliminar} moviendo={moviendo} />
         ))}
         {nueva && (
           <FilaCategoria key="nueva" nueva cat={{ id: 'nueva', nombre: '' }} indice={0} total={1} conteo={0} onCrear={crear} />

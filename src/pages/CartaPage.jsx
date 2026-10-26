@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { actualizarProducto, eliminarProducto, getCategorias, getProductosAdmin } from '../lib/api';
+import { actualizarProducto, eliminarCategoria, eliminarProducto, getCategorias, getProductosAdmin } from '../lib/api';
 import { contarPorCategoria, filtrarProductos, programarEliminacion, tieneFoto } from '../lib/carta';
 import EditorProducto from '../components/carta/EditorProducto';
 import AsistenteProducto from '../components/carta/AsistenteProducto';
@@ -142,6 +142,32 @@ export default function CartaPage() {
     });
   }, [avisar, avisarError, guardarOptimista, restaurar, usuario.id]);
 
+  const [categoriasOcultas, setCategoriasOcultas] = useState([]);
+  const eliminarCat = useCallback((cat) => {
+    const n = contarPorCategoria(productos)[cat.id] || 0;
+    if (n > 0) {
+      avisar(`“${cat.nombre}” tiene ${n} ${n === 1 ? 'producto' : 'productos'}. Muévelos a otra categoría antes de eliminarla.`);
+      return;
+    }
+    const key = `c${cat.id}`;
+    setCategoriasOcultas((o) => [...o, cat.id]);
+    const mostrar = () => setCategoriasOcultas((o) => o.filter((x) => x !== cat.id));
+    const elim = programarEliminacion({
+      ejecutar: async () => {
+        pendientesRef.current.delete(key);
+        await eliminarCategoria(cat.id, usuario.id);
+        await recargar();
+        mostrar();
+      },
+      onError: (e) => { mostrar(); avisarError(e?.message || 'No se pudo eliminar'); },
+    });
+    pendientesRef.current.set(key, elim);
+    avisar(`Categoría eliminada · ${cat.nombre}`, {
+      etiqueta: 'Deshacer',
+      onClick: () => { elim.deshacer(); pendientesRef.current.delete(key); mostrar(); setAviso(null); },
+    });
+  }, [productos, avisar, avisarError, recargar, usuario.id]);
+
   const editando = useMemo(() => productos.find((p) => p.id === editandoId) || null, [productos, editandoId]);
 
   const categoriasOrdenadas = useMemo(
@@ -198,6 +224,8 @@ export default function CartaPage() {
           <ListaCategorias
             categorias={categorias}
             conteo={conteos}
+            ocultas={categoriasOcultas}
+            onEliminar={eliminarCat}
             onRecargar={recargar}
             onAviso={(t, a) => (t ? avisar(t, a) : setAviso(null))}
             usuarioId={usuario.id}
