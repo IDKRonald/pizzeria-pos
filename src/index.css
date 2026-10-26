@@ -8,23 +8,29 @@
    y se sobreescriben con data-theme="light"
 ══════════════════════════════════════════════════════════════ */
 [data-theme="dark"], :root {
+  /* Acento */
+  --accent:       #F47A2A;
+  --accent-hover: #FF8C42;
+  --on-accent:    #1A0E05;
+  --tono-l:       22%;      /* luminosidad del placeholder de productos sin foto */
+  --focus-ring:   rgba(244,122,42,0.45);
   /* Fondos */
-  --bg-main:      #0f0f13;
+  --bg-main:      #121318;
   --bg-surf1:     #13131b;   /* header */
-  --bg-surf2:     #1c1c28;   /* cards */
+  --bg-surf2:     #20232B;   /* cards */
   --bg-surf3:     #16161f;   /* sidebar */
   --bg-surf4:     #1a1a26;   /* sidebar header/footer */
   --bg-surf5:     #11111a;   /* filter bar */
-  --bg-surf6:     #1e1e2a;   /* inputs, selects */
+  --bg-surf6:     #20232B;   /* inputs, selects */
   --bg-surf7:     #22222f;   /* hover de controles */
   /* Bordes */
-  --border-1:     #2a2a3a;
+  --border-1:     #2D313B;
   --border-2:     #2e2e42;
   --border-3:     #3d3d52;
   /* Texto */
-  --text-1:       #f1f0f5;
+  --text-1:       #F3F3F5;
   --text-2:       #cbd5e1;   /* slate-300 */
-  --text-3:       #94a3b8;   /* slate-400 */
+  --text-3:       #A4A9B6;   /* slate-400 */
   --text-4:       #64748b;   /* slate-500 */
   --text-5:       #475569;   /* slate-600 */
   /* Cantidad en cart */
@@ -37,6 +43,12 @@
 }
 
 [data-theme="light"] {
+  /* Acento */
+  --accent:       #C2541A;
+  --accent-hover: #A84614;
+  --on-accent:    #FFFFFF;
+  --tono-l:       84%;
+  --focus-ring:   rgba(194,84,26,0.4);
   /* Fondos */
   --bg-main:      #f0eff8;
   --bg-surf1:     #ffffff;
