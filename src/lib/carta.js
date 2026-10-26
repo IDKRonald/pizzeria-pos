@@ -7,7 +7,8 @@ export function tieneFoto(imagen) {
   return typeof imagen === 'string' && (imagen.startsWith('/uploads/') || imagen.startsWith('http'));
 }
 
-export function urlImagen(imagen) {
+export function urlImagen(imagen, host = (typeof location !== 'undefined' ? location.hostname : 'localhost')) {
+  if (typeof imagen === 'string' && imagen.startsWith('/uploads/')) return `http://${host}:3001${imagen}`;
   return imagen;
 }
 
@@ -64,6 +65,6 @@ export function intercambiarOrden(categorias, indice, dir) {
 }
 
 export function tamanosSugeridos(productos, categoriaId) {
-  const p = productos.find((x) => x.categoria_id === categoriaId && x.tiene_variantes);
+  const p = productos.find((x) => x.categoria_id === categoriaId && x.tiene_variantes && (x.variantes || []).length > 0);
   return p ? (p.variantes || []).map((v) => v.nombre_tamanio) : [];
 }

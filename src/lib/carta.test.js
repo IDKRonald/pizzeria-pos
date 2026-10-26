@@ -17,7 +17,8 @@ test('tieneFoto y urlImagen', () => {
   assert.equal(tieneFoto('http://x/y.png'), true);
   assert.equal(tieneFoto('🥤'), false);
   assert.equal(tieneFoto(''), false);
-  assert.equal(urlImagen('/uploads/a.jpg'), '/uploads/a.jpg');
+  assert.equal(urlImagen('/uploads/a.jpg', 'pos.local'), 'http://pos.local:3001/uploads/a.jpg');
+  assert.equal(urlImagen('http://x/y.png', 'pos.local'), 'http://x/y.png');
 });
 
 test('parsePrecio', () => {
