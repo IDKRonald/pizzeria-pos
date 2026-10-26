@@ -33,6 +33,7 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
   const [guardando, setGuardando] = useState(false);
 
   const dialogoRef = useRef(null);
+  const enviandoRef = useRef(false);
   // Ref para que un onCerrar inline no reinicie el efecto de foco en cada render.
   const cerrarRef = useRef(onCerrar);
   useEffect(() => { cerrarRef.current = onCerrar; });
@@ -41,9 +42,9 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
     const previo = document.activeElement;
     dialogoRef.current?.querySelector('input[type="text"]')?.focus();
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); cerrarRef.current(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); if (!enviandoRef.current) cerrarRef.current(); return; }
       if (e.key !== 'Tab' || !dialogoRef.current) return;
-      const f = [...dialogoRef.current.querySelectorAll('button:not([disabled]), input:not([disabled])')];
+      const f = [...dialogoRef.current.querySelectorAll('button:not([disabled]), input:not([disabled]):not([type="file"])')];
       if (!f.length) return;
       const primero = f[0];
       const ultimo = f[f.length - 1];
@@ -65,6 +66,7 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
   const porTamanos = modo === 'tamanos' && tamanos.length > 0;
 
   const elegirCategoria = (id) => {
+    if (id === categoriaId) return;
     setCategoriaId(id);
     setModo('unico');
     setPrecios({});
@@ -89,7 +91,8 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
   };
 
   const agregar = async () => {
-    if (guardando || !completo) return;
+    if (enviandoRef.current || !completo) return;
+    enviandoRef.current = true;
     setGuardando(true);
     try {
       await crearProducto({
@@ -103,6 +106,7 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
       onCreado({ nombre: nombreLimpio, categoria_id: categoriaId });
     } catch (e) {
       onError(e?.message || 'No se pudo crear el producto');
+      enviandoRef.current = false;
       setGuardando(false);
     }
   };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { actualizarProducto, actualizarVariante } from '../../lib/api';
 import { formatoMiles, parsePrecio } from '../../lib/carta';
@@ -41,6 +41,17 @@ export default function EditorProducto({ producto, categorias, onCambio, onCerra
   const [nombrePrevio, setNombrePrevio] = useState(producto.nombre);
   if (nombrePrevio !== producto.nombre) { setNombrePrevio(producto.nombre); setNombre(producto.nombre); }
 
+  // Ref para que un onCerrar inline no reinicie el efecto en cada render.
+  const cerrarRef = useRef(onCerrar);
+  useEffect(() => { cerrarRef.current = onCerrar; });
+  const cerrarBtnRef = useRef(null);
+  useEffect(() => {
+    cerrarBtnRef.current?.focus();
+    const onKeyDown = (ev) => { if (ev.key === 'Escape') cerrarRef.current(); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const variantes = producto.variantes || [];
   const visible = !!producto.activo;
 
@@ -81,7 +92,7 @@ export default function EditorProducto({ producto, categorias, onCambio, onCerra
       <div className="flex items-center justify-between gap-3 px-4 py-3 sticky top-0 z-10"
         style={{ background: 'var(--bg-surf1)', borderBottom: '1px solid var(--border-1)' }}>
         <h2 className="text-base font-extrabold">Editar producto</h2>
-        <button type="button" onClick={onCerrar} aria-label="Cerrar"
+        <button ref={cerrarBtnRef} type="button" onClick={onCerrar} aria-label="Cerrar"
           className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl cursor-pointer text-[var(--text-2)] ${foco}`}>
           <IconoCerrar />
         </button>

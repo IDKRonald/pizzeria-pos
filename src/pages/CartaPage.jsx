@@ -61,11 +61,16 @@ export default function CartaPage() {
   const avisar = useCallback((texto, accion) => setAviso({ texto, accion }), []);
   const avisarError = useCallback((msg) => avisar(msg || 'No se pudo guardar'), [avisar]);
 
+  // Eliminaciones diferidas pendientes; al desmontar se cancelan sin enviar el DELETE.
+  const pendientesRef = useRef(new Map());
+
   /** Vuelve a pedir productos y categorías al backend. */
   const recargar = useCallback(async () => {
     try {
       const [ps, cs] = await Promise.all([getProductosAdmin(), getCategorias()]);
-      setProductos(ps);
+      // No reaparecen productos con eliminación pendiente (claves numéricas; las categorías usan "c<id>").
+      const pendientes = pendientesRef.current;
+      setProductos(ps.filter((p) => !pendientes.has(p.id)));
       setCategorias(cs);
     } catch (e) {
       avisarError(e?.message || 'No se pudo cargar la carta');
@@ -94,8 +99,7 @@ export default function CartaPage() {
     }
   }, [actualizarLocal, avisar, avisarError, usuario.id]);
 
-  // Eliminaciones diferidas pendientes; al desmontar se cancelan sin enviar el DELETE.
-  const pendientesRef = useRef(new Map());
+  // Eliminaciones diferidas pendientes (montaje/desmontaje): ver pendientesRef arriba.
   useEffect(() => {
     const pendientes = pendientesRef.current;
     return () => {
@@ -104,23 +108,30 @@ export default function CartaPage() {
     };
   }, []);
 
-  /** Devuelve el producto a la lista (si no está ya). */
-  const restaurar = useCallback((producto) => {
-    setProductos((ps) => (ps.some((p) => p.id === producto.id) ? ps : [...ps, producto]));
+  /** Devuelve el producto a la lista (si no está ya), en su posición original. */
+  const restaurar = useCallback((producto, indice) => {
+    setProductos((ps) => {
+      if (ps.some((p) => p.id === producto.id)) return ps;
+      const i = Math.min(Math.max(indice ?? ps.length, 0), ps.length);
+      return [...ps.slice(0, i), producto, ...ps.slice(i)];
+    });
   }, []);
 
   const eliminar = useCallback((producto) => {
     const { id } = producto;
+    const indice = productos.findIndex((p) => p.id === id);
     setEditandoId(null);
     setProductos((ps) => ps.filter((p) => p.id !== id));
     const elim = programarEliminacion({
       ejecutar: async () => {
-        pendientesRef.current.delete(id);
+        // Sigue pendiente mientras el DELETE está en vuelo, para que un recargar() no lo traiga de vuelta.
         await eliminarProducto(id, usuario.id);
+        pendientesRef.current.delete(id);
       },
       onError: (e) => {
-        restaurar(producto);
-        if (e?.status === 409 || /venta/i.test(e?.message || '')) {
+        pendientesRef.current.delete(id);
+        restaurar(producto, indice);
+        if (e?.status === 409) {
           avisar('Tiene ventas registradas, así que no se puede borrar. Puedes ocultarlo de la venta.', {
             etiqueta: 'Ocultar',
             onClick: () => { setAviso(null); guardarOptimista(producto, { activo: 0 }, `${producto.nombre} oculto en la venta`); },
@@ -136,11 +147,11 @@ export default function CartaPage() {
       onClick: () => {
         elim.deshacer();
         pendientesRef.current.delete(id);
-        restaurar(producto);
+        restaurar(producto, indice);
         setAviso(null);
       },
     });
-  }, [avisar, avisarError, guardarOptimista, restaurar, usuario.id]);
+  }, [productos, avisar, avisarError, guardarOptimista, restaurar, usuario.id]);
 
   const [categoriasOcultas, setCategoriasOcultas] = useState([]);
   const eliminarCat = useCallback((cat) => {
@@ -171,8 +182,8 @@ export default function CartaPage() {
   const editando = useMemo(() => productos.find((p) => p.id === editandoId) || null, [productos, editandoId]);
 
   const categoriasOrdenadas = useMemo(
-    () => [...categorias].sort((a, b) => a.orden - b.orden || a.id - b.id),
-    [categorias],
+    () => [...categorias].filter((c) => !categoriasOcultas.includes(c.id)).sort((a, b) => a.orden - b.orden || a.id - b.id),
+    [categorias, categoriasOcultas],
   );
   const conteos = useMemo(() => contarPorCategoria(productos), [productos]);
   const sinFoto = useMemo(() => productos.filter((p) => !tieneFoto(p.imagen)).length, [productos]);

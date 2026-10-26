@@ -56,7 +56,7 @@ export default function ZonaFoto({ imagen, nombre, variante, onSubida, onError }
         onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setArrastrando(false); }}
         onDrop={alSoltar}
-        className={`relative w-full overflow-hidden rounded-xl ${editor ? 'aspect-[16/10]' : 'aspect-[4/3]'}`}
+        className={`relative w-full overflow-hidden rounded-xl ${editor ? 'aspect-[16/10] max-h-[220px]' : 'aspect-[4/3]'}`}
         style={{
           background: 'var(--tono-l)',
           border: `2px ${hayFoto ? 'solid' : 'dashed'} ${arrastrando ? 'var(--accent)' : 'var(--border-1)'}`,

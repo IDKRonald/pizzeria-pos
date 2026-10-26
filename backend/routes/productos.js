@@ -256,7 +256,9 @@ router.delete('/productos/:id', requireAdmin, (req, res) => {
   const prod = db.prepare('SELECT id FROM productos WHERE id = ?').get(id);
   if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
-  const enVentas = db.prepare('SELECT COUNT(*) as n FROM detalle_pedido WHERE producto_id = ?').get(id);
+  const enVentas = db.prepare(
+    'SELECT COUNT(*) as n FROM detalle_pedido WHERE producto_id = ? OR variante_id IN (SELECT id FROM producto_variantes WHERE producto_id = ?)',
+  ).get(id, id);
   if (enVentas.n > 0) {
     return res.status(409).json({ error: 'Este producto tiene historial de ventas — desactívalo en lugar de eliminarlo' });
   }
@@ -264,6 +266,9 @@ router.delete('/productos/:id', requireAdmin, (req, res) => {
     db.prepare('DELETE FROM productos WHERE id = ?').run(id); // variantes/recetas/combo_slots caen en cascada
     res.json({ message: 'Producto eliminado' });
   } catch (error) {
+    if (error?.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      return res.status(409).json({ error: 'Este producto tiene historial de ventas — desactívalo en lugar de eliminarlo' });
+    }
     console.error('Error al eliminar producto:', error);
     res.status(500).json({ error: 'Error interno al eliminar producto' });
   }
@@ -335,6 +340,9 @@ router.delete('/variantes/:id', requireAdmin, (req, res) => {
     })();
     res.json({ message: 'Variante eliminada' });
   } catch (error) {
+    if (error?.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      return res.status(409).json({ error: 'Este tamaño tiene historial de ventas — no se puede eliminar' });
+    }
     console.error('Error al eliminar variante:', error);
     res.status(500).json({ error: 'Error interno al eliminar variante' });
   }

@@ -26,11 +26,12 @@ function FilaCategoria({ cat, indice, total, conteo, onGuardarNombre, onMover, o
 
   return (
     <li className="flex items-center gap-2 rounded-xl px-2 py-2 border border-[var(--border-1)]" style={{ background: 'var(--bg-surf2)' }}>
+      <span className="text-sm font-semibold text-[var(--text-3)] shrink-0 w-6 text-right" aria-hidden="true">{nueva ? '' : indice + 1}</span>
       <span className="text-[var(--text-4)] shrink-0 w-5 flex justify-center" aria-hidden="true">
         <Svg><circle cx="9" cy="6" r="1" /><circle cx="15" cy="6" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="9" cy="18" r="1" /><circle cx="15" cy="18" r="1" /></Svg>
       </span>
       <label className="flex-1 min-w-0">
-        <span className="sr-only">Nombre de la categoría {indice + 1}</span>
+        <span className="sr-only">{nueva ? 'Nombre de la nueva categoría' : `Nombre de la categoría ${indice + 1}`}</span>
         <input ref={ref} value={nombre} onChange={(e) => setNombre(e.target.value)} onBlur={alSalir}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           placeholder={nueva ? 'Nombre de la categoría' : undefined}
@@ -121,7 +122,7 @@ export default function ListaCategorias({ categorias, conteo, ocultas, onElimina
           <Svg><path d="M12 5v14M5 12h14" /></Svg> Nueva categoría
         </button>
       </div>
-      <ol className="flex flex-col gap-2 list-decimal pl-7 marker:text-[var(--text-3)] marker:font-semibold">
+      <ol className="flex flex-col gap-2">
         {ordenadas.map((c, i) => (
           <FilaCategoria key={c.id} cat={c} indice={i} total={ordenadas.length} conteo={conteo[c.id] || 0}
             onGuardarNombre={guardarNombre} onMover={mover} onEliminar={onEliminar} moviendo={moviendo} />
