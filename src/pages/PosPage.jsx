@@ -765,10 +765,11 @@ export default function PosPage() {
       <div className="no-print flex h-screen overflow-hidden" style={{ background: 'var(--bg-main)' }}>
 
         {/* ─── ÁREA PRINCIPAL ─────────────────────────────────── */}
-        <main className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* overflow-clip: a diferencia de overflow-hidden, no deja que el foco desplace la columna */}
+        <main className="flex flex-col flex-1 min-w-0 overflow-clip">
 
-          {/* ── Header ── */}
-          <header className="flex items-center gap-3 px-4 sm:px-6 py-3 shrink-0 flex-wrap sm:flex-nowrap"
+          {/* ── Header ── (envuelve en vez de desbordar cuando el panel de orden le quita ancho) */}
+          <header className="flex items-center gap-3 px-4 sm:px-6 py-3 shrink-0 flex-wrap"
             style={{ background: 'var(--bg-surf1)', borderBottom: '1px solid var(--border-1)' }}>
 
             {/* Botón volver + marca */}
@@ -824,7 +825,7 @@ export default function PosPage() {
                   Reimprimir
                 </button>
               )}
-              <p className="hidden lg:block text-xs capitalize" style={{ color: 'var(--text-3)' }}>
+              <p className="hidden xl:block text-xs capitalize" style={{ color: 'var(--text-3)' }}>
                 {fechaHeader}
               </p>
               {ultimoRecibo && (
@@ -832,7 +833,7 @@ export default function PosPage() {
                   onClick={handleEnviarWhatsApp}
                   className="hidden lg:flex w-11 h-11 items-center justify-center rounded-xl
                              text-base font-bold transition-colors duration-150"
-                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)' }}
+                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(34,197,94,0.6)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
                 >
@@ -958,15 +959,15 @@ export default function PosPage() {
           className="no-print fixed bottom-4 left-4 right-4 z-30 lg:hidden
                      flex items-center justify-between
                      px-5 py-3.5 rounded-2xl
-                     font-bold text-white text-sm sm:text-base
+                     font-bold text-sm sm:text-base
                      shadow-xl transition-all duration-150 active:scale-[0.98]"
-          style={{ background: 'linear-gradient(135deg, rgb(5,150,105), rgb(4,120,87))' }}
+          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
           <span className="flex items-center gap-2">
-            🛒
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" /><path d="M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h9.4a1 1 0 0 0 1-.8L21 8H6" /></svg>
             <span>Ver orden</span>
             <span className="w-6 h-6 flex items-center justify-center rounded-full
-                             bg-white/25 text-xs font-bold">
+                             bg-black/15 text-xs font-bold">
               {totalItems}
             </span>
           </span>

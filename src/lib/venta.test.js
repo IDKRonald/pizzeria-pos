@@ -36,6 +36,7 @@ test('precioDesde', () => {
 test('tonoProducto es estable y con formato hsl', () => {
   assert.equal(tonoProducto('donp'), tonoProducto('donp'));
   assert.match(tonoProducto('donp'), /^hsl\(\d+, 22%, 22%\)$/);
+  assert.match(tonoProducto('donp', 'var(--tono-l)'), /^hsl\(\d+, 22%, var\(--tono-l\)\)$/);
 });
 
 test('billetesRapidos', () => {

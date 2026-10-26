@@ -45,7 +45,7 @@ export default function ProductCard({ producto, onAgregar, onAbrirVariantes, onA
     >
       {/* Foto 4:3 o bloque de color si no hay foto */}
       <div className="w-full aspect-[4/3] overflow-hidden"
-        style={{ background: tonoProducto(producto.id) }}>
+        style={{ background: tonoProducto(producto.id, 'var(--tono-l)') }}>
         {srcFoto && !falloImagen && (
           <img
             src={srcFoto}

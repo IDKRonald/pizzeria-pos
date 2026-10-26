@@ -12,6 +12,7 @@
   --accent:       #F47A2A;
   --accent-hover: #FF8C42;
   --on-accent:    #1A0E05;
+  --tono-l:       22%;      /* luminosidad del placeholder de productos sin foto */
   --focus-ring:   rgba(244,122,42,0.45);
   /* Fondos */
   --bg-main:      #121318;
@@ -46,6 +47,7 @@
   --accent:       #C2541A;
   --accent-hover: #A84614;
   --on-accent:    #FFFFFF;
+  --tono-l:       84%;
   --focus-ring:   rgba(194,84,26,0.4);
   /* Fondos */
   --bg-main:      #f0eff8;

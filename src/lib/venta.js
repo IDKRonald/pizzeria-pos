@@ -33,10 +33,10 @@ export const precioDesde = (producto) => {
   return producto.precio;
 };
 
-/** Color de fondo estable derivado del id del producto. */
-export const tonoProducto = (id) => {
+/** Color de fondo estable derivado del id del producto. `luz` admite var(--tono-l) para seguir el tema. */
+export const tonoProducto = (id, luz = '22%') => {
   const hash = [...String(id)].reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return `hsl(${hash % 360}, 22%, 22%)`;
+  return `hsl(${hash % 360}, 22%, ${luz})`;
 };
 
 /** Montos sugeridos de pago en efectivo, sin repetidos y ordenados. */

@@ -31,16 +31,17 @@ function VistaPrevia({ producto, segunda, esMitad }) {
   return (
     <svg width="160" height="160" viewBox="0 0 160 160" role="img" aria-label={label}>
       {!esMitad ? (
-        <circle cx={c} cy={c} r={r} fill={tonoProducto(producto.id)} stroke="var(--border-2)" strokeWidth="2" />
+        <circle cx={c} cy={c} r={r} style={{ fill: tonoProducto(producto.id, 'var(--tono-l)') }} stroke="var(--border-2)" strokeWidth="2" />
       ) : (
         <>
+          {/* fill vía style: el atributo SVG no resuelve var(--tono-l) */}
           <path
             d={`M ${c} ${c - r} A ${r} ${r} 0 0 0 ${c} ${c + r} Z`}
-            fill={tonoProducto(producto.id)}
+            style={{ fill: tonoProducto(producto.id, 'var(--tono-l)') }}
           />
           <path
             d={`M ${c} ${c - r} A ${r} ${r} 0 0 1 ${c} ${c + r} Z`}
-            fill={segunda ? tonoProducto(segunda.id) : 'transparent'}
+            style={{ fill: segunda ? tonoProducto(segunda.id, 'var(--tono-l)') : 'transparent' }}
             stroke={segunda ? 'none' : 'var(--text-3)'}
             strokeWidth="2"
             strokeDasharray={segunda ? undefined : '6 5'}
