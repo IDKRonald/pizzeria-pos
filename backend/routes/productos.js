@@ -59,6 +59,9 @@ router.put('/categorias/:id', requireAdmin, (req, res) => {
     db.prepare('UPDATE categorias SET nombre = ?, emoji = ?, orden = ? WHERE id = ?').run(nombre, emoji, orden, id);
     res.json({ message: 'Categoría actualizada' });
   } catch (error) {
+    if (String(error.message).includes('UNIQUE')) {
+      return res.status(409).json({ error: `Ya existe una categoría llamada "${nombre}"` });
+    }
     console.error('Error al actualizar categoría:', error);
     res.status(500).json({ error: 'Error interno al actualizar categoría' });
   }
