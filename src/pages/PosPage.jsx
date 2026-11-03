@@ -2,11 +2,13 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto } from '../lib/api';
+import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto, getMesas } from '../lib/api';
 import { useCajaAbierta } from '../hooks/useCajaAbierta';
+import { debeEnfocarBusqueda } from '../lib/venta';
 import ProductCard from '../components/ProductCard';
 import CheckoutSidebar from '../components/CheckoutSidebar';
 import TicketImpresion, { ETIQUETAS_PAGO } from '../components/TicketImpresion';
+import ModalCobro from '../components/ModalCobro';
 import ModalVariantes from '../components/ModalVariantes';
 import ModalComboBebida from '../components/ModalComboBebida';
 import ModalCustomItem from '../components/ModalCustomItem';
@@ -115,6 +117,18 @@ export default function PosPage() {
   /* ── Checkout extra data ── */
   const [montoEntregado, setMontoEntregado] = useState('');
   const [facturarAhorita, setFacturarAhorita] = useState(false);
+  const [cobroAbierto, setCobroAbierto] = useState(false);
+  // "Mesa" elegida en el segmentado aunque todavía no haya número.
+  const [quiereMesa, setQuiereMesa] = useState(false);
+  // Abrir el cobro implica facturar ahora.
+  const abrirCobro = useCallback(() => { setFacturarAhorita(true); setCobroAbierto(true); }, []);
+  const cerrarCobro = useCallback(() => { setCobroAbierto(false); setFacturarAhorita(false); setMontoAbonar(""); }, []);
+  const [mesas, setMesas] = useState([]);
+
+  // Mesas para la cuadrícula del panel; si falla, queda solo el input manual.
+  useEffect(() => {
+    getMesas().then((r) => setMesas(Array.isArray(r) ? r : [])).catch(() => setMesas([]));
+  }, []);
   const [montoAbonar, setMontoAbonar] = useState('');
   const [montoPagadoHistorico, setMontoPagadoHistorico] = useState(0);
   const [estadoOriginal, setEstadoOriginal] = useState('pendiente');
@@ -143,6 +157,16 @@ export default function PosPage() {
       hour: '2-digit', minute: '2-digit', second: '2-digit',
     })
   );
+
+  const [fechaHeader, setFechaHeader] = useState('');
+  useEffect(() => {
+    const actualizar = () => setFechaHeader(new Date().toLocaleString('es-CO', {
+      weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    }));
+    actualizar();
+    const id = setInterval(actualizar, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   /* ── Persistencia ── */
   useEffect(() => { localStorage.setItem(LS_CART,      JSON.stringify(cart));        }, [cart]);
@@ -244,7 +268,7 @@ export default function PosPage() {
   }, [edicionBloqueada]);
 
   const resetOrden = useCallback(() => {
-    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado('');
+    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado(''); setQuiereMesa(false);
     setFacturarAhorita(false); setMontoAbonar(''); setMontoPagadoHistorico(0); setEstadoOriginal('pendiente');
     setPedidoActivoId(null); setOrdenActivaNum(null); setModoEdicion(null); setMesaInfo(null);
   }, []);
@@ -254,6 +278,7 @@ export default function PosPage() {
     setPedidoActivoId(pedidoDB.id);
     setOrdenActivaNum(pedidoDB.numero_orden);
     setMesa(pedidoDB.mesa_id ? String(pedidoDB.mesa_id) : '');
+    setQuiereMesa(Boolean(pedidoDB.mesa_id));
     setEsDomicilio(pedidoDB.tipo === 'domicilio');
     setTipoPago(pedidoDB.metodo_pago || 'efectivo');
     setMontoPagadoHistorico(pedidoDB.monto_pagado || 0);
@@ -284,6 +309,7 @@ export default function PosPage() {
     } else if (st.mesaId) {
       resetOrden();
       setMesa(String(st.mesaId));
+      setQuiereMesa(true);
     }
 
     if (st.mesaId) {
@@ -300,7 +326,7 @@ export default function PosPage() {
     resetOrden();
   }, [cart.length, resetOrden]);
 
-  const procesarPedidoDB = async (estado) => {
+  const procesarPedidoDB = async (estado, registrarPago = false) => {
     const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
     const prop = conPropina ? Math.round(sub * 0.10) : 0;
     const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
@@ -347,7 +373,7 @@ export default function PosPage() {
 
     const saldoRestante = tot - montoPagadoHistorico;
     const abonoRaw = parseInt(String(montoAbonar).replace(/\D/g, ''));
-    const pago_actual = facturarAhorita ? (!isNaN(abonoRaw) ? abonoRaw : saldoRestante) : 0;
+    const pago_actual = (registrarPago && facturarAhorita) ? (!isNaN(abonoRaw) ? abonoRaw : saldoRestante) : 0;
 
     const pedido = {
       mesa_id: mesa ? parseInt(mesa, 10) : null,
@@ -377,7 +403,7 @@ export default function PosPage() {
 
     try {
       // 1. Guardar en BD. Si ya existe mantenemos su estado. Si es nuevo, 'pendiente' para que vaya a cocina.
-      await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente');
+      await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente', true);
 
       // 2. Imprimir recibo
       const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
@@ -405,10 +431,10 @@ export default function PosPage() {
           setIsReprinting(true);
           setTimeout(() => {
             window.print();
-            setTimeout(() => { setIsReprinting(false); resetOrden(); setIsProcesando(false); }, 100);
+            setTimeout(() => { setIsReprinting(false); resetOrden(); setCobroAbierto(false); setIsProcesando(false); }, 100);
           }, 150);
         } else {
-          setTimeout(() => { resetOrden(); setIsProcesando(false); }, 100);
+          setTimeout(() => { resetOrden(); setCobroAbierto(false); setIsProcesando(false); }, 100);
         }
       }, 100);
     } catch (err) {
@@ -416,7 +442,7 @@ export default function PosPage() {
       alert(err?.message || 'Error al guardar el pedido en la base de datos');
       setIsProcesando(false);
     }
-  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, imprimirCopia, enviarWhatsapp, montoEntregado, resetOrden, usuario]);
+  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, imprimirCopia, enviarWhatsapp, montoEntregado, resetOrden, usuario, facturarAhorita, montoAbonar, costoDomicilio, montoPagadoHistorico]);
 
   const handleEnviarCocina = useCallback(async () => {
     if (cart.length === 0 || isProcesando || edicionBloqueada) return;
@@ -471,6 +497,14 @@ export default function PosPage() {
     const focusables = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
     const onKey = (e) => {
+      // Con el modal de cobro abierto, el teclado es suyo (Esc y Tab los maneja él).
+      if (cobroAbierto) return;
+      // "/" enfoca el buscador (salvo que se esté escribiendo)
+      if (debeEnfocarBusqueda(e)) {
+        e.preventDefault();
+        document.getElementById('input-busqueda')?.focus();
+        return;
+      }
       const tag = e.target.tagName.toLowerCase();
       const isTextInput = tag === 'input' || tag === 'textarea';
       const isSelect = tag === 'select';
@@ -584,13 +618,13 @@ export default function PosPage() {
           e.preventDefault();
           document.querySelector('[id^="btn-agregar-"]')?.focus();
           break;
-        case 'p': // Checkout sidebar
+        case 'p': // Abrir el cobro
           e.preventDefault();
-          document.getElementById('select-tipo-pago')?.focus();
+          if (!isProcesando && cart.length > 0 && !productoVariante && !edicionBloqueada && !cajaCerrada) abrirCobro();
           break;
         case 'Enter': // Cobrar orden (si tienes foco general)
-          if (!isProcesando && cart.length > 0 && !productoVariante) {
-            e.preventDefault(); handleCobrar();
+          if (!isProcesando && cart.length > 0 && !productoVariante && !edicionBloqueada && !cajaCerrada) {
+            e.preventDefault(); abrirCobro();
           }
           break;
         case '?': // Mostrar atajos
@@ -608,7 +642,7 @@ export default function PosPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCobrar, handleCancelar, showQR]);
+  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCancelar, showQR, cobroAbierto, abrirCobro, edicionBloqueada, cajaCerrada]);
 
   /* ── Filtrado ── */
   const productosFiltrados = useMemo(() =>
@@ -643,7 +677,7 @@ export default function PosPage() {
           fechaHora={fechaHora} tipoPago={tipoPago} esDomicilio={esDomicilio}
           propina={propina} costoDomicilio={esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0}
           mesa={mesa} montoEntregado={tipoPago === 'efectivo' ? (parseInt(montoEntregado.toString().replace(/\D/g, '')) || 0) : 0} isCopia={false}
-          pagoActual={facturarAhorita ? (parseInt(String(montoAbonar).replace(/\D/g, '')) || (total - montoPagadoHistorico)) : 0} montoPagadoHistorico={montoPagadoHistorico} />
+          pagoActual={facturarAhorita ? (() => { const a = parseInt(String(montoAbonar).replace(/\D/g, '')); return !isNaN(a) ? a : (total - montoPagadoHistorico); })() : 0} montoPagadoHistorico={montoPagadoHistorico} />
       )}
 
       <ModalVariantes producto={productoVariante}
@@ -664,6 +698,21 @@ export default function PosPage() {
       )}
 
       {/* Modal QR */}
+      <ModalCobro
+        abierto={cobroAbierto}
+        onCerrar={cerrarCobro}
+        total={total}
+        saldoRestante={total - montoPagadoHistorico}
+        tipoPago={tipoPago} setTipoPago={setTipoPago}
+        esDomicilio={esDomicilio} costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+        facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
+        montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
+        montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
+        imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
+        enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
+        isProcesando={isProcesando}
+        onConfirmar={handleCobrar}
+      />
       {showQR && <ModalQR onCerrar={() => setShowQR(false)} />}
 
       {showCuentas && (
@@ -716,154 +765,141 @@ export default function PosPage() {
       <div className="no-print flex h-screen overflow-hidden" style={{ background: 'var(--bg-main)' }}>
 
         {/* ─── ÁREA PRINCIPAL ─────────────────────────────────── */}
-        <main className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* overflow-clip: a diferencia de overflow-hidden, no deja que el foco desplace la columna */}
+        <main className="flex flex-col flex-1 min-w-0 overflow-clip">
 
-          {/* ── Header ── */}
-          <header className="flex items-center gap-3 px-4 sm:px-6 py-3 shrink-0 flex-wrap sm:flex-nowrap"
+          {/* ── Header ── (envuelve en vez de desbordar cuando el panel de orden le quita ancho) */}
+          <header className="flex items-center gap-3 px-4 sm:px-6 py-3 shrink-0 flex-wrap"
             style={{ background: 'var(--bg-surf1)', borderBottom: '1px solid var(--border-1)' }}>
 
-            {/* Botón volver + Logo */}
+            {/* Botón volver + marca */}
             <div className="flex items-center gap-2.5 shrink-0">
               <button onClick={() => navigate(mesaInfo ? '/mesas' : '/hub')}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center
+                className="w-11 h-11 rounded-xl flex items-center justify-center
                            text-sm transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
                 title={mesaInfo ? 'Volver al diagrama de mesas' : 'Volver al Hub'}
-              >←</button>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-orange-500 to-red-600
-                              flex items-center justify-center text-base sm:text-lg shadow-md">🍕</div>
-              <div className="hidden sm:block">
+                aria-label={mesaInfo ? 'Volver al diagrama de mesas' : 'Volver al Hub'}
+              ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg></button>
+              <div>
                 <h1 className="text-base font-extrabold tracking-tight leading-none"
-                  style={{ color: 'var(--text-1)' }}>Don Peñolinni POS</h1>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-4)' }}>Punto de Venta</p>
+                  style={{ color: 'var(--text-1)' }}>Don Peñolinni</h1>
+                <p className="hidden sm:block text-[11px] mt-0.5" style={{ color: 'var(--text-4)' }}>Punto de venta</p>
               </div>
-              <h1 className="sm:hidden text-sm font-extrabold" style={{ color: 'var(--text-1)' }}>
-                Don Peñolinni
-              </h1>
             </div>
 
-            {/* Buscador — crece para llenar espacio disponible */}
-            <div className="relative flex-1 min-w-[120px]">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm select-none"
-                style={{ color: 'var(--text-4)' }}>🔍</span>
-              <input id="input-busqueda" type="text" placeholder="Buscar…"
+            {/* Buscador — centro, crece para llenar espacio disponible */}
+            <div className="relative flex-1 min-w-[120px] max-w-xl mx-auto">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="16" height="16"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                style={{ color: 'var(--text-4)' }}>
+                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+              </svg>
+              <input id="input-busqueda" type="text" placeholder="Buscar producto"
                 value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
                 aria-label="Buscar producto"
-                className="w-full pl-9 pr-4 py-2 rounded-xl text-sm outline-none transition-all"
-                style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-1)' }}
-                onFocus={(e) => { e.target.style.borderColor = 'rgba(249,115,22,0.7)'; }}
-                onBlur={(e) => { e.target.style.borderColor = 'var(--border-2)'; }} />
+                className="w-full min-h-[44px] pl-9 pr-9 py-2 rounded-xl text-sm outline-none transition-colors
+                           border border-[var(--border-2)] focus:border-[var(--accent)]"
+                style={{ background: 'var(--bg-surf6)', color: 'var(--text-1)' }} />
+              <kbd className="hidden sm:block absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono
+                              px-1.5 rounded pointer-events-none"
+                style={{ color: 'var(--text-4)', border: '1px solid var(--border-2)' }}>/</kbd>
             </div>
 
             {/* Acciones de cabecera */}
             <div className="flex items-center gap-2 shrink-0 ml-auto">
-              <div className="hidden lg:block text-right">
-                <p className="text-xs" style={{ color: 'var(--text-3)' }}>{fechaHora}</p>
-                <p className="text-[11px]" style={{ color: 'var(--text-5)' }}>Bogotá D.C.</p>
-              </div>
-              
-              {ultimoRecibo && (
-                <button aria-label="Reimprimir último recibo" title="Reimprimir copia"
-                  onClick={handleReimprimir}
-                  className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl
-                             text-base font-bold transition-colors duration-150"
-                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
-                >
-                  🖨️
+              {usuario?.rol !== 'mesero' && (
+                <button onClick={() => setShowCuentas(true)}
+                  className="hidden sm:flex items-center px-3 min-h-[44px] rounded-xl text-sm font-semibold
+                             transition-colors duration-150 border border-[var(--border-2)] hover:border-[var(--accent)]"
+                  style={{ background: 'var(--bg-surf6)', color: 'var(--text-2)' }}>
+                  Pedidos abiertos
                 </button>
               )}
               {ultimoRecibo && (
+                <button onClick={handleReimprimir}
+                  className="hidden lg:flex items-center px-3 min-h-[44px] rounded-xl text-sm font-semibold
+                             transition-colors duration-150 border border-[var(--border-2)] hover:border-[var(--accent)]"
+                  style={{ background: 'var(--bg-surf6)', color: 'var(--text-2)' }}>
+                  Reimprimir
+                </button>
+              )}
+              <p className="hidden xl:block text-xs capitalize" style={{ color: 'var(--text-3)' }}>
+                {fechaHeader}
+              </p>
+              {ultimoRecibo && (
                 <button aria-label="Enviar última factura por WhatsApp" title="Enviar por WhatsApp"
                   onClick={handleEnviarWhatsApp}
-                  className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl
+                  className="hidden lg:flex w-11 h-11 items-center justify-center rounded-xl
                              text-base font-bold transition-colors duration-150"
-                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)' }}
+                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(34,197,94,0.6)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
                 >
-                  💬
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5Z" /></svg>
                 </button>
               )}
               {/* Botón atajos (solo desktop) */}
               <button id="btn-atajos" aria-label="Atajos de teclado" title="Atajos [?]"
                 onClick={() => setMostrarAtajos((v) => !v)}
-                className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl
+                className="hidden lg:flex w-11 h-11 items-center justify-center rounded-xl
                            text-sm font-bold transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}>?</button>
-              {usuario?.rol !== 'mesero' && (
-                <button aria-label="Cuentas Abiertas" title="Cuentas Abiertas"
-                  onClick={() => setShowCuentas(true)}
-                  className="hidden sm:flex w-9 h-9 items-center justify-center rounded-xl text-lg transition-colors duration-150"
-                  style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}>
-                  🧾
-                </button>
-              )}
               {/* Botón QR — conectar dispositivo */}
               <button
                 id="btn-qr"
                 aria-label="Conectar dispositivo por QR"
                 title="Conectar tablet / celular"
                 onClick={() => setShowQR(true)}
-                className="w-9 h-9 flex items-center justify-center rounded-xl
+                className="w-11 h-11 flex items-center justify-center rounded-xl
                            text-base transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
               >
-                📡
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0" /><path d="M8.5 16a5 5 0 0 1 7 0" /><circle cx="12" cy="19" r="1" /></svg>
               </button>
               {/* Toggle tema */}
               <button id="btn-toggle-tema" aria-label="Cambiar tema"
                 onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-                className="w-9 h-9 flex items-center justify-center rounded-xl text-lg
+                className="w-11 h-11 flex items-center justify-center rounded-xl text-lg
                            transition-colors duration-150"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}>
-                {theme === 'dark' ? '☀️' : '🌙'}
+                {theme === 'dark' ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>}
               </button>
             </div>
           </header>
 
-          {/* ── Filtros de categoría ── */}
+          {/* ── Filtros de categoría (chips) ── */}
           <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3"
             style={{ background: 'var(--bg-surf5)', borderBottom: '1px solid var(--border-1)' }}>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {categoriasMenu.map((cat, idx) => {
                 const activo = categoriaActiva === cat.id;
+                const conteo = cat.id === 'Todos'
+                  ? menuProductos.length
+                  : menuProductos.filter((p) => p.categoria === cat.id).length;
                 return (
                   <button key={cat.id}
                     id={`filtro-${cat.id.toLowerCase().replace(/\s+/g, '-')}`}
-                    aria-label={`Filtrar por ${cat.id}`} aria-pressed={activo}
+                    aria-pressed={activo}
                     onClick={() => setCategoriaActiva(cat.id)}
                     title={idx < 9 ? `Atajo: tecla ${idx + 1}` : undefined}
-                    className="flex items-center gap-1.5 sm:gap-2
-                               px-3 sm:px-4 py-2 sm:py-2.5
-                               rounded-full text-xs sm:text-sm
-                               font-semibold whitespace-nowrap
-                               transition-all duration-150 touch-manipulation select-none"
+                    className="flex items-center gap-2 px-4 min-h-[44px] rounded-full text-sm
+                               font-semibold whitespace-nowrap shrink-0
+                               transition-colors duration-150 touch-manipulation select-none"
                     style={{
-                      minHeight: '36px',
-                      background: activo ? 'rgb(249,115,22)'          : 'transparent',
-                      border:     activo ? '1px solid rgb(249,115,22)' : '1px solid var(--border-2)',
-                      color:      activo ? '#fff'                      : 'var(--text-3)',
-                      boxShadow:  activo ? '0 2px 14px rgba(249,115,22,0.35)' : 'none',
+                      background: activo ? 'var(--accent)' : 'transparent',
+                      border:     activo ? '1px solid var(--accent)' : '1px solid var(--border-2)',
+                      color:      activo ? 'var(--on-accent)' : 'var(--text-3)',
                     }}>
-                    <span className="text-sm sm:text-base leading-none">{cat.emoji}</span>
-                    <span>{cat.id}</span>
-                    {idx < 9 && (
-                      <span className="hidden lg:inline text-[10px] opacity-40 font-mono">
-                        [{idx + 1}]
-                      </span>
-                    )}
+                    <span>{cat.id === 'Todos' ? 'Todas' : cat.id}</span>
+                    <span className="text-xs opacity-70">{conteo}</span>
                   </button>
                 );
               })}
@@ -901,19 +937,13 @@ export default function PosPage() {
         <div className="hidden lg:flex lg:flex-col lg:h-screen lg:w-[340px] lg:min-w-[280px]">
           <CheckoutSidebar cart={cart} onIncrementar={handleIncrementar}
             onDecrementar={handleDecrementar} onCancelar={handleCancelar}
-            onCobrar={handleCobrar} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
-            tipoPago={tipoPago} setTipoPago={setTipoPago}
+            onAbrirCobro={abrirCobro} quiereMesa={quiereMesa} setQuiereMesa={setQuiereMesa} mesas={mesas} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
             esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
             costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
             conPropina={conPropina} setConPropina={setConPropina}
             mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
-            imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
-            enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
-            montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
-            facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
-            montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
-            saldoRestante={total - montoPagadoHistorico} />
+            />
         </div>
       </div>
 
@@ -929,15 +959,15 @@ export default function PosPage() {
           className="no-print fixed bottom-4 left-4 right-4 z-30 lg:hidden
                      flex items-center justify-between
                      px-5 py-3.5 rounded-2xl
-                     font-bold text-white text-sm sm:text-base
+                     font-bold text-sm sm:text-base
                      shadow-xl transition-all duration-150 active:scale-[0.98]"
-          style={{ background: 'linear-gradient(135deg, rgb(5,150,105), rgb(4,120,87))' }}
+          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
           <span className="flex items-center gap-2">
-            🛒
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" /><path d="M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h9.4a1 1 0 0 0 1-.8L21 8H6" /></svg>
             <span>Ver orden</span>
             <span className="w-6 h-6 flex items-center justify-center rounded-full
-                             bg-white/25 text-xs font-bold">
+                             bg-black/15 text-xs font-bold">
               {totalItems}
             </span>
           </span>
@@ -969,21 +999,15 @@ export default function PosPage() {
               onIncrementar={handleIncrementar}
               onDecrementar={handleDecrementar}
               onCancelar={handleCancelar}
-              onCobrar={handleCobrar}
+              onAbrirCobro={abrirCobro} quiereMesa={quiereMesa} setQuiereMesa={setQuiereMesa}
+              mesas={mesas}
               onEnviarCocina={handleEnviarCocina}
               isProcesando={isProcesando}
-              tipoPago={tipoPago} setTipoPago={setTipoPago}
               esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
               costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
               conPropina={conPropina} setConPropina={setConPropina}
               mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
-              imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
-              enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
-              montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
-              facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
-              montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
-              saldoRestante={total - montoPagadoHistorico}
               isDrawer
               onCerrar={() => setCartDrawerOpen(false)}
             />

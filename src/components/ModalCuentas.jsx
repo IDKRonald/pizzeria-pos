@@ -82,16 +82,16 @@ export default function ModalCuentas({ onCerrar, onSeleccionar }) {
                 >
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-black text-lg text-white">{pedido.numero_orden}</span>
+                      <span className="font-black text-lg text-[var(--text-1)]">{pedido.numero_orden}</span>
                       <span className={`px-2 py-0.5 rounded text-xs font-bold border ${stateBg} ${stateText} ${stateBorder}`}>
                         {stateIcon} {pedido.estado.replace('_', ' ').toUpperCase()}
                       </span>
                       {pedido.mesa_id ? (
-                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-white/10 text-white border border-white/20">
+                        <span className="px-2 py-0.5 rounded text-xs font-bold text-[var(--text-1)] bg-[var(--bg-surf7)] border border-[var(--border-2)]">
                           🪑 MESA {pedido.mesa_numero || pedido.mesa_id}{pedido.grupo_nombre ? ` (${pedido.grupo_nombre})` : ''}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-white/10 text-white border border-white/20">
+                        <span className="px-2 py-0.5 rounded text-xs font-bold text-[var(--text-1)] bg-[var(--bg-surf7)] border border-[var(--border-2)]">
                           {pedido.tipo === 'domicilio' ? '🛵 DOMICILIO' : '🛍️ LLEVAR'}
                         </span>
                       )}
