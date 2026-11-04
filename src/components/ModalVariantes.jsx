@@ -1,6 +1,5 @@
 // src/components/ModalVariantes.jsx
 import { useState, useMemo, useEffect } from 'react';
-import { menuPizzeria } from '../data/menu';
 import { formatCOP, tonoProducto, segundaMitadValida } from '../lib/venta';
 
 /**
@@ -54,7 +53,7 @@ function VistaPrevia({ producto, segunda, esMitad }) {
   );
 }
 
-function ModalVariantesInterno({ producto, onSeleccionar, onCerrar }) {
+function ModalVariantesInterno({ producto, menu, onSeleccionar, onCerrar }) {
   const esPizza = producto.categoria === 'Pizzas';
   const [tamano, setTamano] = useState(() => {
     const v = producto.variantes.find((x) => x.nombreTamanio.includes('Mediana')) || producto.variantes[0];
@@ -76,8 +75,8 @@ function ModalVariantesInterno({ producto, onSeleccionar, onCerrar }) {
 
   // Lista de otras pizzas en el menú
   const otrasPizzas = useMemo(
-    () => menuPizzeria.filter((p) => p.categoria === 'Pizzas' && p.id !== producto.id),
-    [producto]
+    () => menu.filter((p) => p.categoria === 'Pizzas' && p.id !== producto.id && p.variantes?.length),
+    [producto, menu]
   );
 
   // Opciones disponibles para la segunda mitad (según el tamaño elegido)
@@ -97,7 +96,7 @@ function ModalVariantesInterno({ producto, onSeleccionar, onCerrar }) {
   const cambiarTamano = (v) => {
     setTamano(v.nombreTamanio);
     // Si la segunda mitad no existe en el nuevo tamaño, se descarta
-    if (!segundaMitadValida(segunda, v.nombreTamanio, menuPizzeria)) setSegunda(null);
+    if (!segundaMitadValida(segunda, v.nombreTamanio, menu)) setSegunda(null);
   };
 
   const opcionSegunda = esMitad && segunda ? opcionesSegundaMitad.find((o) => o.pizza.id === segunda.id) : null;
@@ -292,10 +291,10 @@ function ModalVariantesInterno({ producto, onSeleccionar, onCerrar }) {
   );
 }
 
-export default function ModalVariantes({ producto, onSeleccionar, onCerrar }) {
+export default function ModalVariantes({ producto, menu = [], onSeleccionar, onCerrar }) {
   if (!producto) return null;
   // La key reinicia el estado interno al cambiar de producto
   return (
-    <ModalVariantesInterno key={producto.id} producto={producto} onSeleccionar={onSeleccionar} onCerrar={onCerrar} />
+    <ModalVariantesInterno key={producto.id} producto={producto} menu={menu} onSeleccionar={onSeleccionar} onCerrar={onCerrar} />
   );
 }

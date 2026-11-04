@@ -12,6 +12,7 @@ import MesasPage from './pages/MesasPage';
 import KdsPage from './pages/KdsPage';
 import InventarioPage from './pages/InventarioPage';
 import EstadisticasPage from './pages/EstadisticasPage';
+import CartaPage from './pages/CartaPage';
 
 export default function App() {
   return (
@@ -36,6 +37,9 @@ export default function App() {
           } />
           <Route path="/inventario" element={
             <ProtectedRoute roles={['admin']}><InventarioPage /></ProtectedRoute>
+          } />
+          <Route path="/carta" element={
+            <ProtectedRoute roles={['admin']}><CartaPage /></ProtectedRoute>
           } />
           <Route path="/estadisticas" element={
             <ProtectedRoute roles={['admin','cajero']}><EstadisticasPage /></ProtectedRoute>
