@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   programarEliminacion, tieneFoto, urlImagen, parsePrecio, formatoMiles, validarFoto, filtrarProductos,
-  contarPorCategoria, normalizarOrden, intercambiarOrden, tamanosSugeridos,
+  contarPorCategoria, normalizarOrden, intercambiarOrden, tamanosSugeridos, listasDeTamanos, validarTamanos,
 } from './carta.js';
 
 const prods = [
@@ -66,6 +66,31 @@ test('intercambiarOrden', () => {
 test('tamanosSugeridos', () => {
   assert.deepEqual(tamanosSugeridos(prods, 1), ['Personal', 'Grande']);
   assert.deepEqual(tamanosSugeridos(prods, 2), []);
+});
+
+test('tamanosSugeridos usa la lista más común, no la del primer producto', () => {
+  const v = (...ns) => ns.map((n) => ({ nombre_tamanio: n }));
+  const lista = [
+    { id: 1, nombre: 'Jugo de mora', categoria_id: 1, tiene_variantes: 1, variantes: v('En agua', 'En leche') },
+    { id: 2, nombre: 'Pizza A', categoria_id: 1, tiene_variantes: 1, variantes: v('Junior', 'Mediana') },
+    { id: 3, nombre: 'Pizza B', categoria_id: 1, tiene_variantes: 1, variantes: v('Junior', 'Mediana') },
+  ];
+  assert.deepEqual(tamanosSugeridos(lista, 1), ['Junior', 'Mediana']);
+});
+
+test('listasDeTamanos omite categorías sin tamaños y listas repetidas', () => {
+  const otra = { id: 9, categoria_id: 3, tiene_variantes: 1, variantes: [{ nombre_tamanio: 'Personal' }, { nombre_tamanio: 'Grande' }] };
+  const cats = [{ id: 1, nombre: 'Pizzas' }, { id: 2, nombre: 'Bebidas' }, { id: 3, nombre: 'Calzone' }];
+  assert.deepEqual(listasDeTamanos([...prods, otra], cats), [{ categoriaId: 1, nombre: 'Pizzas', tamanos: ['Personal', 'Grande'] }]);
+});
+
+test('validarTamanos', () => {
+  assert.equal(validarTamanos([{ nombre: 'Junior', precio: '10.000' }, { nombre: 'Mediana', precio: 20000 }]), null);
+  assert.equal(validarTamanos([]), 'Agrega al menos un tamaño');
+  assert.equal(validarTamanos([{ nombre: '  ', precio: 1 }]), 'Cada tamaño necesita un nombre');
+  assert.match(validarTamanos([{ nombre: 'Único', precio: 1 }, { nombre: ' unico ', precio: 2 }]), /repetido/);
+  assert.match(validarTamanos([{ nombre: 'Junior', precio: '' }]), /Falta el precio/);
+  assert.match(validarTamanos([{ nombre: 'Junior', precio: 0 }]), /Falta el precio/);
 });
 
 function relojFalso() {

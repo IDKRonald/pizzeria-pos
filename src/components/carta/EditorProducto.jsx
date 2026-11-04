@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { actualizarProducto, actualizarVariante } from '../../lib/api';
+import { actualizarProducto, actualizarVariante, crearVariante, eliminarVariante } from '../../lib/api';
 import { formatoMiles, parsePrecio } from '../../lib/carta';
 import ZonaFoto from './ZonaFoto';
 
@@ -12,6 +12,47 @@ const IconoCerrar = () => (
     <path d="M6 6l12 12M18 6L6 18" />
   </svg>
 );
+
+/** Fila de un tamaño existente: nombre, precio y quitar (con un segundo toque para confirmar). */
+function FilaTamano({ variante, puedeQuitar, onRenombrar, onPrecio, onQuitar }) {
+  const [nombre, setNombre] = useState(variante.nombre_tamanio);
+  const [previo, setPrevio] = useState(variante.nombre_tamanio);
+  const [confirmando, setConfirmando] = useState(false);
+  if (previo !== variante.nombre_tamanio) { setPrevio(variante.nombre_tamanio); setNombre(variante.nombre_tamanio); }
+  const [valor, setValor] = useState(formatoMiles(Number(variante.precio) || 0));
+  const [precioPrevio, setPrecioPrevio] = useState(variante.precio);
+  if (precioPrevio !== variante.precio) { setPrecioPrevio(variante.precio); setValor(formatoMiles(Number(variante.precio) || 0)); }
+  return (
+    <div className="flex items-center gap-2">
+      <input value={nombre} aria-label={`Nombre del tamaño ${variante.nombre_tamanio}`}
+        onChange={(e) => setNombre(e.target.value)}
+        onBlur={() => {
+          const limpio = nombre.trim();
+          if (limpio === variante.nombre_tamanio) { setNombre(limpio); return; }
+          if (!onRenombrar(limpio)) setNombre(variante.nombre_tamanio);
+        }}
+        className={`${campoCls} flex-1 min-w-0`} style={{ background: 'var(--bg-surf6)' }} />
+      <span className="relative w-28 shrink-0">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--text-3)]">$</span>
+        <input inputMode="numeric" value={valor} aria-label={`Precio ${variante.nombre_tamanio}`}
+          onChange={(e) => { const n = parsePrecio(e.target.value); setValor(n === null ? '' : formatoMiles(n)); }}
+          onBlur={() => {
+            const n = parsePrecio(valor);
+            if (!n || n === Number(variante.precio)) { setValor(formatoMiles(Number(variante.precio) || 0)); return; }
+            onPrecio(n);
+          }}
+          className={`${campoCls} pl-7 text-right`} style={{ background: 'var(--bg-surf6)' }} />
+      </span>
+      <button type="button" disabled={!puedeQuitar} onBlur={() => setConfirmando(false)}
+        aria-label={confirmando ? `Confirmar quitar ${variante.nombre_tamanio}` : `Quitar ${variante.nombre_tamanio}`}
+        title={puedeQuitar ? undefined : 'Debe quedar al menos un tamaño'}
+        onClick={() => { if (confirmando) onQuitar(); else setConfirmando(true); }}
+        className={`shrink-0 min-h-[44px] min-w-[44px] px-2 flex items-center justify-center rounded-xl text-xs font-semibold cursor-pointer border border-[var(--border-1)] text-[var(--text-2)] disabled:opacity-40 disabled:cursor-not-allowed ${foco}`}>
+        {confirmando ? '¿Quitar?' : <IconoCerrar />}
+      </button>
+    </div>
+  );
+}
 
 function CampoPrecio({ etiqueta, precio, onGuardar }) {
   const [valor, setValor] = useState(formatoMiles(Number(precio) || 0));
@@ -78,6 +119,55 @@ export default function EditorProducto({ producto, categorias, onCambio, onCerra
     }
   };
 
+  const nombreRepetido = (nombreNuevo, idPropio) => {
+    const clave = nombreNuevo.toLowerCase();
+    return variantes.some((v) => v.id !== idPropio && v.nombre_tamanio.trim().toLowerCase() === clave);
+  };
+
+  /** Devuelve false si el nombre no es válido, para que la fila lo revierta. */
+  const renombrarVariante = (v, limpio) => {
+    if (!limpio) { onError('El tamaño necesita un nombre'); return false; }
+    if (nombreRepetido(limpio, v.id)) { onError(`El tamaño "${limpio}" ya existe`); return false; }
+    const conNombre = (n) => variantes.map((x) => (x.id === v.id ? { ...x, nombre_tamanio: n } : x));
+    onCambio(producto.id, { variantes: conNombre(limpio) });
+    actualizarVariante(v.id, { nombre_tamanio: limpio }, usuario.id).catch((e) => {
+      onCambio(producto.id, { variantes: conNombre(v.nombre_tamanio) });
+      onError(e?.message);
+    });
+    return true;
+  };
+
+  const quitarVariante = async (v) => {
+    try {
+      await eliminarVariante(v.id, usuario.id);
+      onCambio(producto.id, { variantes: variantes.filter((x) => x.id !== v.id) });
+    } catch (e) {
+      onError(e?.message);
+    }
+  };
+
+  const [nuevoTamano, setNuevoTamano] = useState('');
+  const [nuevoPrecio, setNuevoPrecio] = useState('');
+  const precioNuevo = parsePrecio(nuevoPrecio);
+  const agregarVariante = async () => {
+    const limpio = nuevoTamano.trim();
+    if (!limpio || !(precioNuevo > 0)) return;
+    if (nombreRepetido(limpio)) { onError(`El tamaño "${limpio}" ya existe`); return; }
+    try {
+      const { id } = await crearVariante(producto.id, { nombre_tamanio: limpio, precio: precioNuevo }, usuario.id);
+      // El backend pasa el producto a "por tamaños" al recibir su primer tamaño.
+      onCambio(producto.id, {
+        tiene_variantes: 1,
+        precio: null,
+        variantes: [...variantes, { id, producto_id: producto.id, nombre_tamanio: limpio, precio: precioNuevo }],
+      });
+      setNuevoTamano('');
+      setNuevoPrecio('');
+    } catch (e) {
+      onError(e?.message);
+    }
+  };
+
   const guardarNombre = () => {
     const limpio = nombre.trim();
     if (!limpio || limpio === producto.nombre) { setNombre(producto.nombre); return; }
@@ -130,11 +220,29 @@ export default function EditorProducto({ producto, categorias, onCambio, onCerra
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold text-[var(--text-3)]">Precio</span>
+          <span className="text-xs font-semibold text-[var(--text-3)]">{variantes.length > 0 ? 'Tamaños y precios' : 'Precio'}</span>
           {variantes.length > 0 ? variantes.map((v) => (
-            <CampoPrecio key={v.id} etiqueta={v.nombre_tamanio} precio={v.precio} onGuardar={(n) => guardarVariante(v, n)} />
+            <FilaTamano key={v.id} variante={v} puedeQuitar={variantes.length > 1}
+              onRenombrar={(n) => renombrarVariante(v, n)} onPrecio={(n) => guardarVariante(v, n)} onQuitar={() => quitarVariante(v)} />
           )) : (
             <CampoPrecio etiqueta="Precio" precio={producto.precio} onGuardar={(n) => guardar({ precio: n })} />
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <input value={nuevoTamano} onChange={(e) => setNuevoTamano(e.target.value)} placeholder="Tamaño nuevo"
+              aria-label="Nombre del tamaño nuevo" className={`${campoCls} flex-1 min-w-0`} style={{ background: 'var(--bg-surf6)' }} />
+            <span className="relative w-28 shrink-0">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--text-3)]">$</span>
+              <input inputMode="numeric" value={precioNuevo === null ? '' : formatoMiles(precioNuevo)} aria-label="Precio del tamaño nuevo"
+                onChange={(e) => setNuevoPrecio(e.target.value)}
+                className={`${campoCls} pl-7 text-right`} style={{ background: 'var(--bg-surf6)' }} />
+            </span>
+            <button type="button" disabled={!nuevoTamano.trim() || !(precioNuevo > 0)} onClick={agregarVariante}
+              className={`shrink-0 min-h-[44px] px-3 rounded-xl text-sm font-semibold cursor-pointer border border-[var(--border-2)] text-[var(--text-1)] disabled:opacity-40 disabled:cursor-not-allowed ${foco}`}>
+              Agregar
+            </button>
+          </div>
+          {variantes.length === 0 && (
+            <p className="text-xs text-[var(--text-3)]">Al agregar un tamaño, este precio único deja de usarse.</p>
           )}
         </div>
 

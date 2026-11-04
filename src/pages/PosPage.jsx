@@ -680,7 +680,7 @@ export default function PosPage() {
           pagoActual={facturarAhorita ? (() => { const a = parseInt(String(montoAbonar).replace(/\D/g, '')); return !isNaN(a) ? a : (total - montoPagadoHistorico); })() : 0} montoPagadoHistorico={montoPagadoHistorico} />
       )}
 
-      <ModalVariantes producto={productoVariante}
+      <ModalVariantes producto={productoVariante} menu={menuProductos}
         onSeleccionar={handleSeleccionarVariante} onCerrar={() => setProductoVariante(null)} />
 
       <ModalComboBebida producto={productoCombo}

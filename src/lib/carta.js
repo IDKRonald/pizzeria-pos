@@ -64,9 +64,48 @@ export function intercambiarOrden(categorias, indice, dir) {
   return [{ id: a.id, orden: b.orden }, { id: b.id, orden: a.orden }];
 }
 
+/** Listas de tamaños que ya existen en la carta, para copiar sus nombres: una por lista distinta. */
+export function listasDeTamanos(productos, categorias) {
+  const vistas = new Set();
+  const listas = [];
+  for (const c of categorias) {
+    const tamanos = tamanosSugeridos(productos, c.id);
+    const clave = tamanos.join('|');
+    if (!tamanos.length || vistas.has(clave)) continue;
+    vistas.add(clave);
+    listas.push({ categoriaId: c.id, nombre: c.nombre, tamanos });
+  }
+  return listas;
+}
+
+/** Revisa las filas de tamaños ({ nombre, precio }). Devuelve el mensaje de error o null. */
+export function validarTamanos(filas) {
+  if (!filas.length) return 'Agrega al menos un tamaño';
+  const vistos = new Set();
+  for (const f of filas) {
+    const nombre = normalizar(f.nombre).trim();
+    if (!nombre) return 'Cada tamaño necesita un nombre';
+    if (vistos.has(nombre)) return `El tamaño "${String(f.nombre).trim()}" está repetido`;
+    vistos.add(nombre);
+    if (!(parsePrecio(f.precio) > 0)) return `Falta el precio de "${String(f.nombre).trim()}"`;
+  }
+  return null;
+}
+
 export function tamanosSugeridos(productos, categoriaId) {
-  const p = productos.find((x) => x.categoria_id === categoriaId && x.tiene_variantes && (x.variantes || []).length > 0);
-  return p ? (p.variantes || []).map((v) => v.nombre_tamanio) : [];
+  // La lista más común de la categoría: un producto mal ubicado no debe definir sus tamaños.
+  const conteo = new Map();
+  for (const p of productos) {
+    if (p.categoria_id !== categoriaId || !p.tiene_variantes || !(p.variantes || []).length) continue;
+    const tamanos = p.variantes.map((v) => v.nombre_tamanio);
+    const clave = tamanos.join('|');
+    const actual = conteo.get(clave);
+    if (actual) actual.veces += 1;
+    else conteo.set(clave, { tamanos, veces: 1 });
+  }
+  let mejor = null;
+  for (const c of conteo.values()) if (!mejor || c.veces > mejor.veces) mejor = c;
+  return mejor ? mejor.tamanos : [];
 }
 
 /** Eliminación diferida con opción de deshacer; `ejecutar` corre una sola vez al vencer. */

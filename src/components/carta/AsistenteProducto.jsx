@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { crearProducto } from '../../lib/api';
-import { formatoMiles, parsePrecio, tamanosSugeridos } from '../../lib/carta';
+import { formatoMiles, listasDeTamanos, parsePrecio, tamanosSugeridos, validarTamanos } from '../../lib/carta';
 import ProductCard from '../ProductCard';
 import ZonaFoto from './ZonaFoto';
 
 const foco = 'focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]';
 const campoCls = `w-full min-h-[44px] px-3 rounded-xl text-base border border-[var(--border-1)] text-[var(--text-1)] ${foco}`;
 const noop = () => {};
+
+let siguienteFila = 0;
+const nuevaFila = (nombre = '') => ({ clave: ++siguienteFila, nombre, precio: '' });
 
 function CampoPrecio({ valor, onChange, etiqueta }) {
   const n = parsePrecio(valor);
@@ -29,7 +32,7 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
   const [categoriaId, setCategoriaId] = useState(categoriaInicial ?? null);
   const [modo, setModo] = useState('unico'); // 'unico' | 'tamanos'
   const [precio, setPrecio] = useState('');
-  const [precios, setPrecios] = useState({});
+  const [filas, setFilas] = useState([]);
   const [guardando, setGuardando] = useState(false);
 
   const dialogoRef = useRef(null);
@@ -62,24 +65,35 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
     };
   }, []);
 
-  const tamanos = useMemo(() => (categoriaId == null ? [] : tamanosSugeridos(productos, categoriaId)), [productos, categoriaId]);
-  const porTamanos = modo === 'tamanos' && tamanos.length > 0;
+  const listas = useMemo(() => listasDeTamanos(productos, categorias), [productos, categorias]);
+  const porTamanos = modo === 'tamanos';
+
+  // Punto de partida editable: los tamaños de la categoría, o una fila vacía si no tiene.
+  const elegirModo = (id) => {
+    setModo(id);
+    if (id === 'tamanos' && !filas.length) {
+      const sugeridos = categoriaId == null ? [] : tamanosSugeridos(productos, categoriaId);
+      setFilas(sugeridos.length ? sugeridos.map((t) => nuevaFila(t)) : [nuevaFila()]);
+    }
+  };
+  const cambiarFila = (clave, cambios) => setFilas((fs) => fs.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
 
   const elegirCategoria = (id) => {
     if (id === categoriaId) return;
     setCategoriaId(id);
     setModo('unico');
-    setPrecios({});
+    setFilas([]);
   };
 
   const precioUnico = parsePrecio(precio);
-  const preciosOk = porTamanos
-    ? tamanos.every((t) => (parsePrecio(precios[t]) ?? 0) > 0)
-    : (precioUnico ?? 0) > 0;
+  const errorTamanos = porTamanos ? validarTamanos(filas) : null;
+  const preciosOk = porTamanos ? !errorTamanos : (precioUnico ?? 0) > 0;
   const nombreLimpio = nombre.trim();
   const completo = paso === 1 ? nombreLimpio !== '' : paso === 2 ? categoriaId != null : preciosOk;
 
-  const variantes = porTamanos ? tamanos.map((t) => ({ nombre_tamanio: t, precio: parsePrecio(precios[t]) ?? 0 })) : [];
+  const variantes = porTamanos
+    ? filas.map((f) => ({ nombre_tamanio: f.nombre.trim(), precio: parsePrecio(f.precio) ?? 0 }))
+    : [];
   const vista = {
     id: 0,
     nombre: nombreLimpio || 'Nuevo producto',
@@ -87,7 +101,8 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
     categoria_id: categoriaId,
     tiene_variantes: porTamanos ? 1 : 0,
     precio: porTamanos ? 0 : (precioUnico ?? 0),
-    variantes,
+    // Las filas aún sin precio no cuentan para el "Desde" de la vista previa.
+    variantes: variantes.filter((v) => v.precio > 0),
   };
 
   const agregar = async () => {
@@ -164,32 +179,53 @@ export default function AsistenteProducto({ categorias, productos, categoriaInic
 
         {paso === 3 && (
           <div className="flex flex-col gap-4">
-            {tamanos.length > 0 && (
-              <div role="radiogroup" aria-label="Tipo de precio" className="flex gap-2">
-                {[['unico', 'Un solo precio'], ['tamanos', 'Por tamaños']].map(([id, etiqueta]) => (
-                  <button key={id} type="button" role="radio" aria-checked={modo === id} onClick={() => setModo(id)}
-                    className={`flex-1 min-h-[44px] rounded-xl text-sm font-semibold cursor-pointer touch-manipulation ${foco}`}
-                    style={{
-                      background: modo === id ? 'var(--accent)' : 'var(--bg-surf6)',
-                      color: modo === id ? 'var(--on-accent)' : 'var(--text-1)',
-                      border: `1px solid ${modo === id ? 'var(--accent)' : 'var(--border-1)'}`,
-                    }}>
-                    {etiqueta}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div role="radiogroup" aria-label="Tipo de precio" className="flex gap-2">
+              {[['unico', 'Un solo precio'], ['tamanos', 'Por tamaños']].map(([id, etiqueta]) => (
+                <button key={id} type="button" role="radio" aria-checked={modo === id} onClick={() => elegirModo(id)}
+                  className={`flex-1 min-h-[44px] rounded-xl text-sm font-semibold cursor-pointer touch-manipulation ${foco}`}
+                  style={{
+                    background: modo === id ? 'var(--accent)' : 'var(--bg-surf6)',
+                    color: modo === id ? 'var(--on-accent)' : 'var(--text-1)',
+                    border: `1px solid ${modo === id ? 'var(--accent)' : 'var(--border-1)'}`,
+                  }}>
+                  {etiqueta}
+                </button>
+              ))}
+            </div>
             {porTamanos ? (
               <div className="flex flex-col gap-2">
-                {tamanos.map((t) => (
-                  <div key={t} className="flex items-center gap-3">
-                    <span className="w-28 text-sm font-semibold">{t}</span>
-                    <div className="flex-1">
-                      <CampoPrecio etiqueta={`Precio ${t}`} valor={precios[t]}
-                        onChange={(v) => setPrecios((p) => ({ ...p, [t]: v }))} />
+                {listas.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 pb-1">
+                    <span className="text-sm text-[var(--text-3)]">Usar tamaños de:</span>
+                    {listas.map((l) => (
+                      <button key={l.categoriaId} type="button" onClick={() => setFilas(l.tamanos.map((t) => nuevaFila(t)))}
+                        className={`min-h-[44px] px-3 rounded-xl text-sm font-semibold cursor-pointer touch-manipulation border border-[var(--border-1)] text-[var(--text-1)] ${foco}`}>
+                        {l.nombre}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {filas.map((f, i) => (
+                  <div key={f.clave} className="flex items-center gap-2">
+                    <input type="text" value={f.nombre} aria-label={`Nombre del tamaño ${i + 1}`} placeholder="Tamaño"
+                      onChange={(e) => cambiarFila(f.clave, { nombre: e.target.value })}
+                      className={`${campoCls} flex-1 min-w-0`} style={{ background: 'var(--bg-surf6)' }} />
+                    <div className="w-32 shrink-0">
+                      <CampoPrecio etiqueta={`Precio del tamaño ${i + 1}`} valor={f.precio}
+                        onChange={(v) => cambiarFila(f.clave, { precio: v })} />
                     </div>
+                    <button type="button" aria-label={`Quitar el tamaño ${i + 1}`} disabled={filas.length === 1}
+                      onClick={() => setFilas((fs) => fs.filter((x) => x.clave !== f.clave))}
+                      className={`shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl cursor-pointer text-[var(--text-2)] border border-[var(--border-1)] disabled:opacity-40 disabled:cursor-not-allowed ${foco}`}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
                   </div>
                 ))}
+                <button type="button" onClick={() => setFilas((fs) => [...fs, nuevaFila()])}
+                  className={`min-h-[44px] rounded-xl text-sm font-semibold cursor-pointer touch-manipulation border border-dashed border-[var(--border-2)] text-[var(--text-1)] ${foco}`}>
+                  + Agregar tamaño
+                </button>
+                {errorTamanos && <p className="text-sm text-[var(--text-3)]">{errorTamanos}</p>}
               </div>
             ) : (
               <CampoPrecio etiqueta="Precio" valor={precio} onChange={setPrecio} />
