@@ -50,10 +50,15 @@ function insertarItemsDetalle(insertDetalleStmt, pedidoId, items) {
  * Obtiene los pedidos. Permite filtrar por estado.
  */
 router.get('/', (req, res) => {
-  const { estado, mesa_id } = req.query;
+  const { estado, mesa_id, vista } = req.query;
   try {
     const condiciones = [];
     const params = [];
+    // Cocina: lo que falta por entregar, más los cancelados recientes para avisar al cocinero.
+    if (vista === 'cocina') {
+      condiciones.push(`(p.estado IN ('pendiente','en_preparacion','listo')
+        OR (p.estado = 'cancelado' AND p.updated_at >= datetime('now','localtime','-3 hours')))`);
+    }
     if (estado)  { condiciones.push('p.estado = ?');  params.push(estado); }
     if (mesa_id) { condiciones.push('p.mesa_id = ?'); params.push(mesa_id); }
     const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';

@@ -54,6 +54,7 @@ export default function CheckoutSidebar({
   quiereMesa = false,
   setQuiereMesa = () => {},
   mesaInfo = null,
+  llevarEnMesa = false,
   edicionBloqueada = false,
   cajaCerrada = false,
   puedeAbrirCaja = false,
@@ -62,7 +63,7 @@ export default function CheckoutSidebar({
   onCerrar,
 }) {
   // quiereMesa vive en PosPage: "Mesa" elegida sin número todavía (tipoOrden diría "llevar").
-  const tipoDeducido = tipoOrden({ esDomicilio, mesa });
+  const tipoDeducido = llevarEnMesa ? 'llevar' : tipoOrden({ esDomicilio, mesa });
   const tipo = tipoDeducido === 'llevar' && quiereMesa ? 'mesa' : tipoDeducido;
   const tipoBloqueado = Boolean(mesaInfo) || edicionBloqueada;
 
@@ -152,6 +153,12 @@ export default function CheckoutSidebar({
             );
           })}
         </div>
+
+        {llevarEnMesa && mesaInfo && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold" style={estiloInput}>
+            Para llevar · espera en Mesa {mesaInfo.numero}
+          </div>
+        )}
 
         {/* ── Mesa ── */}
         {tipo === 'mesa' && (

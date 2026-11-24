@@ -34,18 +34,21 @@ function serializarMesas() {
   }
 
   const conteoActivos = db.prepare(`
-    SELECT mesa_id, COUNT(*) as n FROM pedidos
+    SELECT mesa_id, COUNT(*) as n, SUM(MAX(total - monto_pagado, 0)) as saldo, MIN(created_at) as desde FROM pedidos
     WHERE ${SQL_PEDIDO_ACTIVO} AND mesa_id IS NOT NULL
     GROUP BY mesa_id
   `).all();
-  const conteoPorMesa = Object.fromEntries(conteoActivos.map((r) => [r.mesa_id, r.n]));
+  const conteoPorMesa = Object.fromEntries(conteoActivos.map((r) => [r.mesa_id, r]));
 
   return mesas.map((m) => {
     const grupo = m.grupo_id ? gruposPorId[m.grupo_id] : null;
     // Los pedidos activos de una mesa fusionada pueden estar en cualquier miembro,
     // no solo en la principal — se suman todos para reflejar la cuenta compartida.
     const miembros = grupo ? mesas.filter((x) => x.grupo_id === m.grupo_id).map((x) => x.id) : [m.id];
-    const pedidosActivos = miembros.reduce((acc, id) => acc + (conteoPorMesa[id] || 0), 0);
+    const filas = miembros.map((id) => conteoPorMesa[id]).filter(Boolean);
+    const pedidosActivos = filas.reduce((acc, r) => acc + r.n, 0);
+    const saldo = filas.reduce((acc, r) => acc + (r.saldo || 0), 0);
+    const desde = filas.map((r) => r.desde).sort()[0] || null;
 
     return {
       ...m,
@@ -53,6 +56,8 @@ function serializarMesas() {
         ? { id: grupo.id, nombre: grupo.nombre, mesa_principal_id: grupo.mesa_principal_id, miembros: numerosPorGrupo[grupo.id] || [] }
         : null,
       pedidos_activos: pedidosActivos,
+      saldo,
+      desde,
     };
   });
 }

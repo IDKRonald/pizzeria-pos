@@ -152,6 +152,11 @@ export function getPedidosPendientes() {
   return fetchApi('/pedidos');
 }
 
+/** Pedidos por entregar + cancelados recientes, del más antiguo al más nuevo */
+export function getPedidosCocina() {
+  return fetchApi('/pedidos?vista=cocina');
+}
+
 /**
  * Actualiza el estado de un pedido
  */

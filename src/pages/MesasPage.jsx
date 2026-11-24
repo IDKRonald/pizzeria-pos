@@ -1,43 +1,35 @@
 // src/pages/MesasPage.jsx
-// Diagrama del salón: mesero selecciona mesa y toma pedido; admin además
-// puede añadir, arrastrar, eliminar y fusionar mesas.
+// Salón en cuadrícula: cada mesa muestra su estado, minutos y saldo. Al tocarla se abre su detalle al lado.
+// Admin además puede añadir, unir y eliminar mesas.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { useDialogos } from '../context/DialogosContext';
 import socket from '../lib/socket';
-import { getMesas, crearMesa, actualizarMesa, eliminarMesa, fusionarMesas } from '../lib/api';
+import { getMesas, crearMesa, fusionarMesas } from '../lib/api';
 import PanelDetalleMesa from '../components/PanelDetalleMesa';
+import { ESTADO_MESA, fmt, etiquetaEstilo } from '../lib/mesas';
 
-const ESTADO_ESTILO = {
-  libre:          { bg: 'rgba(100,116,139,0.14)', border: 'rgba(100,116,139,0.45)', text: '#94a3b8', label: 'Libre' },
-  ocupada:        { bg: 'rgba(59,130,246,0.16)',  border: 'rgba(59,130,246,0.55)',  text: '#60a5fa', label: 'Ocupada' },
-  en_preparacion: { bg: 'rgba(249,115,22,0.16)',  border: 'rgba(249,115,22,0.55)',  text: '#fb923c', label: 'En cocina' },
-  lista:          { bg: 'rgba(16,185,129,0.16)',  border: 'rgba(16,185,129,0.55)',  text: '#34d399', label: 'Lista' },
-  por_pagar:      { bg: 'rgba(168,85,247,0.16)',  border: 'rgba(168,85,247,0.55)',  text: '#c084fc', label: 'Por pagar' },
-};
-
-const MESA_W = 108;
-const MESA_H = 92;
+const minutosDesde = (s) => (s ? Math.max(0, Math.floor((Date.now() - new Date(String(s).replace(' ', 'T'))) / 60000)) : 0);
 
 export default function MesasPage() {
   const navigate = useNavigate();
   const { usuario } = useAuth();
-  const { avisar, confirmar } = useDialogos();
+  const { avisar } = useDialogos();
   const puedeEditar = usuario.rol === 'admin';
 
   const [mesas, setMesas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
+  const [filtro, setFiltro] = useState('todas');
+  const [, setTick] = useState(0);
 
   const [mesaSeleccionada, setMesaSeleccionada] = useState(null);
   const [modoFusion, setModoFusion] = useState(false);
   const [seleccionFusion, setSeleccionFusion] = useState([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [formMesa, setFormMesa] = useState({ numero: '', nombre: '', capacidad: 4 });
-
-  const dragRef = useRef(null);
 
   const cargarMesas = useCallback(() => {
     getMesas()
@@ -48,66 +40,33 @@ export default function MesasPage() {
 
   useEffect(() => { cargarMesas(); }, [cargarMesas]);
 
-  /* ── Sincronía en vivo ── */
+  // Los minutos de cada mesa avanzan solos.
   useEffect(() => {
-    const onMesaActualizada = (data) => {
-      const id = data.id ?? data.mesa_id;
-      setMesas((prev) => prev.map((m) => m.id === id ? { ...m, estado: data.estado } : m));
-    };
-    const onCambioPedido = () => cargarMesas(); // conteos de pedidos activos pueden cambiar
-    const onReconectar = () => cargarMesas();   // resync tras una desconexión
-    socket.on('mesa_actualizada', onMesaActualizada);
-    socket.on('pedido_actualizado', onCambioPedido);
-    socket.on('nuevo_pedido', onCambioPedido);
-    socket.on('connect', onReconectar);
+    const t = setInterval(() => setTick((n) => n + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    socket.on('mesa_actualizada', cargarMesas);
+    socket.on('pedido_actualizado', cargarMesas);
+    socket.on('nuevo_pedido', cargarMesas);
+    socket.on('connect', cargarMesas);
     return () => {
-      socket.off('mesa_actualizada', onMesaActualizada);
-      socket.off('pedido_actualizado', onCambioPedido);
-      socket.off('nuevo_pedido', onCambioPedido);
-      socket.off('connect', onReconectar);
+      socket.off('mesa_actualizada', cargarMesas);
+      socket.off('pedido_actualizado', cargarMesas);
+      socket.off('nuevo_pedido', cargarMesas);
+      socket.off('connect', cargarMesas);
     };
   }, [cargarMesas]);
 
-  /* ── Selección / clic ── */
-  const handleClickMesa = useCallback((mesa) => {
+  const handleClickMesa = (mesa) => {
     if (modoFusion) {
-      setSeleccionFusion((prev) =>
-        prev.includes(mesa.id) ? prev.filter((id) => id !== mesa.id) : [...prev, mesa.id]);
+      setSeleccionFusion((prev) => (prev.includes(mesa.id) ? prev.filter((id) => id !== mesa.id) : [...prev, mesa.id]));
       return;
     }
     setMesaSeleccionada(mesa.id);
-  }, [modoFusion]);
-
-  /* ── Arrastrar (solo admin, fuera de modo fusión) ── */
-  const handlePointerDown = (e, mesa) => {
-    if (!puedeEditar || modoFusion) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { id: mesa.id, startX: e.clientX, startY: e.clientY, origX: mesa.x, origY: mesa.y, moved: false };
   };
 
-  const handlePointerMove = (e, mesa) => {
-    if (!dragRef.current || dragRef.current.id !== mesa.id) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragRef.current.moved = true;
-    const nx = Math.max(0, dragRef.current.origX + dx);
-    const ny = Math.max(0, dragRef.current.origY + dy);
-    setMesas((prev) => prev.map((m) => m.id === mesa.id ? { ...m, x: nx, y: ny } : m));
-  };
-
-  const handlePointerUp = (e, mesa) => {
-    if (!dragRef.current || dragRef.current.id !== mesa.id) return;
-    const { moved } = dragRef.current;
-    dragRef.current = null;
-    if (moved) {
-      const actual = mesas.find((m) => m.id === mesa.id);
-      actualizarMesa(mesa.id, { x: actual.x, y: actual.y }, usuario.id).catch((err) => setError(err.message));
-    } else {
-      handleClickMesa(mesa);
-    }
-  };
-
-  /* ── Crear mesa ── */
   const handleCrearMesa = async (e) => {
     e.preventDefault();
     try {
@@ -115,29 +74,21 @@ export default function MesasPage() {
         numero: parseInt(formMesa.numero, 10),
         nombre: formMesa.nombre || null,
         capacidad: parseInt(formMesa.capacidad, 10) || 4,
-        x: 40 + Math.random() * 120,
-        y: 40 + Math.random() * 120,
       }, usuario.id);
       setMostrarForm(false);
       setFormMesa({ numero: '', nombre: '', capacidad: 4 });
-      cargarMesas();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  /* ── Eliminar mesa ── */
-  const handleEliminarMesa = async (mesa) => {
-    if (!(await confirmar({ titulo: `Eliminar mesa ${mesa.numero}`, mensaje: 'La mesa desaparecerá del salón.', aceptar: 'Eliminar', peligro: true }))) return;
-    try {
-      await eliminarMesa(mesa.id, usuario.id);
       cargarMesas();
     } catch (err) {
       avisar(err.message);
     }
   };
 
-  /* ── Fusionar mesas seleccionadas ── */
+  const empezarFusion = (mesaId = null) => {
+    setMesaSeleccionada(null);
+    setModoFusion(true);
+    setSeleccionFusion(mesaId ? [mesaId] : []);
+  };
+
   const handleConfirmarFusion = async () => {
     if (seleccionFusion.length < 2) return;
     try {
@@ -150,200 +101,149 @@ export default function MesasPage() {
     }
   };
 
-  const canvasW = Math.max(760, ...mesas.map((m) => m.x + MESA_W + 40), 0);
-  const canvasH = Math.max(560, ...mesas.map((m) => m.y + MESA_H + 40), 0);
+  // Una mesa unida se muestra una sola vez, en su mesa principal.
+  const visibles = mesas.filter((m) => !m.grupo || m.grupo.mesa_principal_id === m.id);
+  const cuenta = (est) => visibles.filter((m) => est === 'todas' || m.estado === est).length;
+  const filtradas = visibles.filter((m) => filtro === 'todas' || m.estado === filtro);
+  const filtros = [['todas', 'Todas', '#F3F3F5'], ...Object.entries(ESTADO_MESA).map(([k, e]) => [k, e.t, e.c])];
+
+  const botonSecundario = 'inline-flex items-center gap-2 h-11 px-4 rounded-xl text-[15px] font-bold';
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-main, #0a0a12)' }}>
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-3 flex-wrap gap-3"
-        style={{ background: '#13131b', borderBottom: '1px solid #2a2a3a' }}>
-        <div className="flex items-center gap-2.5">
-          <button onClick={() => navigate('/hub')}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-sm"
-            style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#94a3b8' }}>←</button>
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-lg">🪑</div>
-          <div>
-            <h1 className="text-base font-extrabold text-white leading-none">
-              {puedeEditar ? 'Gestor de Mesas' : 'Tomar Pedido'}
-            </h1>
-            <p className="text-[11px] mt-0.5" style={{ color: '#64748b' }}>
-              {puedeEditar ? 'Distribución del salón' : 'Selecciona una mesa para ver o tomar el pedido'}
-            </p>
-          </div>
+    <div className="min-h-screen flex flex-col" style={{ background: '#121318', color: '#F3F3F5' }}>
+      <header className="flex flex-wrap items-center gap-4 px-5 py-3" style={{ background: '#1A1C22', borderBottom: '1px solid #2D313B' }}>
+        <button onClick={() => navigate('/hub')} aria-label="Volver"
+          className="w-11 h-11 flex items-center justify-center rounded-[10px]" style={{ border: '1px solid #2D313B' }}>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xl font-extrabold">Mesas</span>
+          <span className="text-sm" style={{ color: '#A4A9B6' }}>
+            {modoFusion ? 'Toca las mesas que quieres unir' : 'Toca una mesa para tomar, ver o cobrar su pedido'}
+          </span>
         </div>
+        <div className="flex-1" />
 
-        <div className="flex items-center gap-2">
-          {!puedeEditar && (
-            <button onClick={() => navigate('/pos')}
-              className="px-4 py-2 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
-              style={{ background: 'rgb(249,115,22)' }}>
-              🛍️ Pedido para llevar / mostrador
+        {modoFusion ? (
+          <>
+            <span className="text-sm font-semibold" style={{ color: '#C9CDD6' }}>
+              {seleccionFusion.length} seleccionada{seleccionFusion.length === 1 ? '' : 's'}
+            </span>
+            <button onClick={handleConfirmarFusion} disabled={seleccionFusion.length < 2}
+              className={`${botonSecundario} disabled:opacity-40`} style={{ background: 'var(--accent)', color: '#1A0E05' }}>
+              Unir mesas
             </button>
-          )}
+            <button onClick={() => { setModoFusion(false); setSeleccionFusion([]); }}
+              className={botonSecundario} style={{ border: '1px solid #3A3F4C' }}>Cancelar</button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => navigate('/pos')} className={botonSecundario} style={{ border: '1px solid #3A3F4C' }}>
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8h12l-1 12H7z" /><path d="M9 8V6a3 3 0 0 1 6 0v2" /></svg>
+              Pedido para llevar
+            </button>
+            {puedeEditar && (
+              <>
+                <button onClick={() => setMostrarForm(true)} className={botonSecundario} style={{ border: '1px solid #3A3F4C' }}>＋ Añadir mesa</button>
+                <button onClick={() => empezarFusion()} className={botonSecundario} style={{ border: '1px solid #3A3F4C' }}>Unir mesas</button>
+              </>
+            )}
+          </>
+        )}
 
-          {puedeEditar && !modoFusion && (
-            <>
-              <button onClick={() => setMostrarForm(true)}
-                className="px-3.5 py-2 rounded-xl text-sm font-semibold"
-                style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#e2e8f0' }}>
-                ＋ Añadir mesa
-              </button>
-              <button onClick={() => { setModoFusion(true); setSeleccionFusion([]); }}
-                className="px-3.5 py-2 rounded-xl text-sm font-semibold"
-                style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#e2e8f0' }}>
-                🔗 Fusionar mesas
-              </button>
-            </>
-          )}
-
-          {puedeEditar && modoFusion && (
-            <>
-              <span className="text-xs font-semibold" style={{ color: '#94a3b8' }}>
-                {seleccionFusion.length} seleccionada{seleccionFusion.length === 1 ? '' : 's'}
-              </span>
-              <button onClick={handleConfirmarFusion} disabled={seleccionFusion.length < 2}
-                className="px-3.5 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-40"
-                style={{ background: 'rgb(16,185,129)' }}>
-                ✓ Confirmar fusión
-              </button>
-              <button onClick={() => { setModoFusion(false); setSeleccionFusion([]); }}
-                className="px-3.5 py-2 rounded-xl text-sm font-semibold"
-                style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#94a3b8' }}>
-                Cancelar
-              </button>
-            </>
-          )}
+        <div role="group" aria-label="Filtrar por estado" className="w-full flex flex-wrap gap-2">
+          {filtros.map(([k, etiqueta, color]) => (
+            <button key={k} aria-pressed={filtro === k} onClick={() => setFiltro(k)}
+              className="inline-flex items-center gap-2 min-h-11 px-3.5 rounded-full text-sm font-semibold"
+              style={filtro === k ? { background: '#2D313B', border: '1px solid #F3F3F5' } : { border: '1px solid #2D313B' }}>
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+              {etiqueta} <b>{cuenta(k)}</b>
+            </button>
+          ))}
         </div>
       </header>
 
-      {/* Leyenda de estados */}
-      <div className="flex flex-wrap gap-3 px-4 sm:px-6 py-2.5" style={{ borderBottom: '1px solid #1e1e2d' }}>
-        {Object.entries(ESTADO_ESTILO).map(([key, s]) => (
-          <div key={key} className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: s.text }}>
-            <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.text }} />
-            {s.label}
-          </div>
-        ))}
-      </div>
-
       {error && (
-        <div className="mx-4 sm:mx-6 mt-3 px-4 py-2 rounded-xl text-sm font-semibold"
-          style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5' }}>
-          ⚠️ {error}
+        <div role="alert" className="mx-5 mt-3 px-4 py-2 rounded-xl text-sm font-semibold"
+          style={{ background: '#2A1616', border: '1px solid #5A2626', color: '#FFB4AE' }}>
+          {error}
         </div>
       )}
 
-      {/* Diagrama */}
-      <main className="flex-1 overflow-auto p-4 sm:p-6">
-        {cargando ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3">
-            <div className="w-10 h-10 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm" style={{ color: '#64748b' }}>Cargando salón...</p>
-          </div>
-        ) : (
-          <div style={{ position: 'relative', width: canvasW, height: canvasH }}>
-            {mesas.map((mesa) => {
-              const estilo = ESTADO_ESTILO[mesa.estado] || ESTADO_ESTILO.libre;
-              const seleccionadaFusion = seleccionFusion.includes(mesa.id);
-              const arrastrable = puedeEditar && !modoFusion;
+      <div className="flex-1 flex flex-wrap items-stretch">
+        <main className="min-w-0 p-5" style={{ flex: '999 1 560px' }}>
+          {cargando ? (
+            <p className="text-center py-10" style={{ color: '#A4A9B6' }}>Cargando mesas…</p>
+          ) : filtradas.length === 0 ? (
+            <p className="m-0 p-7 text-center rounded-[14px]" style={{ color: '#6B7080', border: '1px dashed #2D313B' }}>
+              {visibles.length === 0 ? 'Aún no hay mesas. Añádelas desde aquí si eres administrador.' : 'Ninguna mesa en este estado.'}
+            </p>
+          ) : (
+            <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
+              {filtradas.map((m) => {
+                const e = ESTADO_MESA[m.estado] || ESTADO_MESA.libre;
+                const elegida = modoFusion ? seleccionFusion.includes(m.id) : mesaSeleccionada === m.id;
+                const numero = m.grupo ? m.grupo.miembros.join(' + ') : m.numero;
+                const detalle = m.estado === 'libre' ? ''
+                  : m.estado === 'por_pagar' ? `Debe ${fmt(m.saldo)}`
+                  : `${minutosDesde(m.desde)} min${m.saldo > 0 ? ` · ${fmt(m.saldo)}` : ''}`;
+                return (
+                  <button key={m.id} onClick={() => handleClickMesa(m)} aria-pressed={elegida}
+                    aria-label={`Mesa ${numero}, ${e.t}`}
+                    className="relative flex flex-col items-start gap-2 min-h-[140px] pl-5 pr-4 pt-4 pb-3.5 overflow-hidden text-left rounded-2xl"
+                    style={{ background: e.fondo, border: `2px solid ${elegida ? 'var(--accent)' : 'transparent'}`, boxShadow: elegida ? '0 0 0 3px rgba(244,122,42,0.3)' : 'none' }}>
+                    <span className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: e.c }} />
+                    <span className="flex items-baseline justify-between gap-2 w-full">
+                      <span className="text-[34px] font-extrabold leading-none">{numero}</span>
+                      <span className="text-sm truncate" style={{ color: '#A4A9B6' }}>{m.grupo?.nombre || m.nombre || ''}</span>
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-sm font-bold" style={etiquetaEstilo(e.c)}>{e.t}</span>
+                    <span className="text-[15px] min-h-5" style={{ color: '#C9CDD6' }}>{detalle}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </main>
 
-              return (
-                <div key={mesa.id}
-                  onPointerDown={(e) => handlePointerDown(e, mesa)}
-                  onPointerMove={(e) => handlePointerMove(e, mesa)}
-                  onPointerUp={(e) => handlePointerUp(e, mesa)}
-                  onClick={() => { if (!arrastrable) handleClickMesa(mesa); }}
-                  className="group select-none"
-                  style={{
-                    position: 'absolute', left: mesa.x, top: mesa.y,
-                    width: MESA_W, height: MESA_H,
-                    borderRadius: 16,
-                    background: estilo.bg,
-                    border: `2px solid ${seleccionadaFusion ? '#f97316' : estilo.border}`,
-                    boxShadow: seleccionadaFusion ? '0 0 0 3px rgba(249,115,22,0.35)' : 'none',
-                    cursor: arrastrable ? 'grab' : 'pointer',
-                    touchAction: 'none',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    transition: 'box-shadow 0.15s',
-                  }}
-                  title={mesa.grupo ? `Fusionada: ${mesa.grupo.miembros.join(' + ')}` : undefined}
-                >
-                  {puedeEditar && !modoFusion && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleEliminarMesa(mesa); }}
-                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                      style={{ background: '#ef4444', color: '#fff' }}
-                      title="Eliminar mesa"
-                    >✕</button>
-                  )}
-                  <span className="text-lg font-black" style={{ color: estilo.text }}>
-                    {mesa.grupo ? mesa.grupo.miembros.join('+') : mesa.numero}
-                  </span>
-                  {mesa.nombre && (
-                    <span className="text-[10px] font-medium truncate px-2" style={{ color: '#94a3b8', maxWidth: MESA_W - 10 }}>
-                      {mesa.nombre}
-                    </span>
-                  )}
-                  <span className="text-[10px] font-bold mt-0.5" style={{ color: estilo.text }}>
-                    {estilo.label}
-                  </span>
-                  {mesa.pedidos_activos > 0 && (
-                    <span className="absolute -bottom-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white"
-                      style={{ background: 'rgb(249,115,22)' }}>
-                      {mesa.pedidos_activos} pedido{mesa.pedidos_activos === 1 ? '' : 's'}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+        {mesaSeleccionada && !modoFusion && (
+          <PanelDetalleMesa
+            key={mesaSeleccionada}
+            mesaId={mesaSeleccionada}
+            estado={mesas.find((m) => m.id === mesaSeleccionada)?.estado}
+            puedeEditar={puedeEditar}
+            onCerrar={() => setMesaSeleccionada(null)}
+            onCambio={cargarMesas}
+            onUnir={() => empezarFusion(mesaSeleccionada)}
+          />
         )}
-      </main>
+      </div>
 
-      {/* Formulario nueva mesa */}
       {mostrarForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}
           onClick={() => setMostrarForm(false)}>
           <form onClick={(e) => e.stopPropagation()} onSubmit={handleCrearMesa}
-            className="w-full max-w-xs rounded-2xl p-5 space-y-3"
-            style={{ background: '#13131b', border: '1px solid #2a2a3a' }}>
-            <h3 className="text-base font-bold text-white">Nueva mesa</h3>
-            <div>
-              <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Número</label>
-              <input required type="number" min="1" value={formMesa.numero}
-                onChange={(e) => setFormMesa((f) => ({ ...f, numero: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' }} />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Nombre (opcional)</label>
-              <input type="text" value={formMesa.nombre}
-                onChange={(e) => setFormMesa((f) => ({ ...f, nombre: e.target.value }))}
-                placeholder="Ej. Terraza 3"
-                className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' }} />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Capacidad</label>
-              <input required type="number" min="1" value={formMesa.capacidad}
-                onChange={(e) => setFormMesa((f) => ({ ...f, capacidad: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' }} />
-            </div>
+            className="w-full max-w-xs rounded-2xl p-5 space-y-3" style={{ background: '#1A1C22', border: '1px solid #2D313B' }}>
+            <h3 className="text-lg font-extrabold">Nueva mesa</h3>
+            {[
+              ['numero', 'Número', 'number', true],
+              ['nombre', 'Nombre (opcional)', 'text', false],
+              ['capacidad', 'Capacidad', 'number', true],
+            ].map(([campo, label, tipo, req]) => (
+              <label key={campo} className="block">
+                <span className="block text-sm font-semibold mb-1" style={{ color: '#A4A9B6' }}>{label}</span>
+                <input required={req} type={tipo} min={tipo === 'number' ? 1 : undefined} value={formMesa[campo]}
+                  placeholder={campo === 'nombre' ? 'Ej. Terraza 3' : undefined}
+                  onChange={(e) => setFormMesa((f) => ({ ...f, [campo]: e.target.value }))}
+                  className="w-full h-11 px-3 rounded-[10px] text-base" style={{ background: '#20232B', border: '1px solid #3A3F4C', color: '#F3F3F5' }} />
+              </label>
+            ))}
             <div className="flex gap-2 pt-1">
-              <button type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: 'rgb(249,115,22)' }}>Crear</button>
-              <button type="button" onClick={() => setMostrarForm(false)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: '#1e1e2d', color: '#94a3b8' }}>Cancelar</button>
+              <button type="submit" className="flex-1 h-11 rounded-xl font-extrabold" style={{ background: 'var(--accent)', color: '#1A0E05' }}>Crear</button>
+              <button type="button" onClick={() => setMostrarForm(false)} className="flex-1 h-11 rounded-xl font-semibold" style={{ border: '1px solid #3A3F4C' }}>Cancelar</button>
             </div>
           </form>
         </div>
-      )}
-
-      {/* Panel de detalle de mesa */}
-      {mesaSeleccionada && (
-        <PanelDetalleMesa
-          mesaId={mesaSeleccionada}
-          puedeEditar={puedeEditar}
-          onCerrar={() => setMesaSeleccionada(null)}
-          onCambio={cargarMesas}
-        />
       )}
     </div>
   );
