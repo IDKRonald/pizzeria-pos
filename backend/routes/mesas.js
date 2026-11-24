@@ -1,11 +1,10 @@
 // backend/routes/mesas.js
 import { Router } from 'express';
 import db from '../db/connection.js';
-import { obtenerMiembrosGrupo, sincronizarEstadoMesa } from '../db/mesa-helpers.js';
+import { obtenerMiembrosGrupo, sincronizarEstadoMesa, SQL_PEDIDO_ACTIVO } from '../db/mesa-helpers.js';
 
 const router = Router();
 
-const ESTADOS_NO_TERMINALES = ['pendiente', 'en_preparacion', 'listo', 'entregado'];
 
 /**
  * Exige que el usuario que hace la petición sea admin.
@@ -35,18 +34,21 @@ function serializarMesas() {
   }
 
   const conteoActivos = db.prepare(`
-    SELECT mesa_id, COUNT(*) as n FROM pedidos
-    WHERE estado IN (${ESTADOS_NO_TERMINALES.map(() => '?').join(',')}) AND mesa_id IS NOT NULL
+    SELECT mesa_id, COUNT(*) as n, SUM(MAX(total - monto_pagado, 0)) as saldo, MIN(created_at) as desde FROM pedidos
+    WHERE ${SQL_PEDIDO_ACTIVO} AND mesa_id IS NOT NULL
     GROUP BY mesa_id
-  `).all(...ESTADOS_NO_TERMINALES);
-  const conteoPorMesa = Object.fromEntries(conteoActivos.map((r) => [r.mesa_id, r.n]));
+  `).all();
+  const conteoPorMesa = Object.fromEntries(conteoActivos.map((r) => [r.mesa_id, r]));
 
   return mesas.map((m) => {
     const grupo = m.grupo_id ? gruposPorId[m.grupo_id] : null;
     // Los pedidos activos de una mesa fusionada pueden estar en cualquier miembro,
     // no solo en la principal — se suman todos para reflejar la cuenta compartida.
     const miembros = grupo ? mesas.filter((x) => x.grupo_id === m.grupo_id).map((x) => x.id) : [m.id];
-    const pedidosActivos = miembros.reduce((acc, id) => acc + (conteoPorMesa[id] || 0), 0);
+    const filas = miembros.map((id) => conteoPorMesa[id]).filter(Boolean);
+    const pedidosActivos = filas.reduce((acc, r) => acc + r.n, 0);
+    const saldo = filas.reduce((acc, r) => acc + (r.saldo || 0), 0);
+    const desde = filas.map((r) => r.desde).sort()[0] || null;
 
     return {
       ...m,
@@ -54,6 +56,8 @@ function serializarMesas() {
         ? { id: grupo.id, nombre: grupo.nombre, mesa_principal_id: grupo.mesa_principal_id, miembros: numerosPorGrupo[grupo.id] || [] }
         : null,
       pedidos_activos: pedidosActivos,
+      saldo,
+      desde,
     };
   });
 }
@@ -78,7 +82,7 @@ router.get('/:id/pedidos', (req, res) => {
     const miembros = obtenerMiembrosGrupo(mesa.id);
     const placeholders = miembros.map(() => '?').join(',');
     const pedidos = db.prepare(`
-      SELECT * FROM pedidos WHERE mesa_id IN (${placeholders}) ORDER BY created_at DESC
+      SELECT *, ${SQL_PEDIDO_ACTIVO} AS activo FROM pedidos WHERE mesa_id IN (${placeholders}) ORDER BY created_at DESC
     `).all(...miembros);
 
     const getItems = db.prepare('SELECT * FROM detalle_pedido WHERE pedido_id = ?');
@@ -199,9 +203,9 @@ router.post('/merge', requireAdmin, (req, res) => {
   const activos = db.prepare(`
     SELECT mesa_id, COUNT(*) as n FROM pedidos
     WHERE mesa_id IN (${mesa_ids.map(() => '?').join(',')})
-      AND estado IN (${ESTADOS_NO_TERMINALES.map(() => '?').join(',')})
+      AND ${SQL_PEDIDO_ACTIVO}
     GROUP BY mesa_id
-  `).all(...mesa_ids, ...ESTADOS_NO_TERMINALES);
+  `).all(...mesa_ids);
 
   if (activos.length > 1) {
     return res.status(409).json({ error: 'Más de una de estas mesas ya tiene un pedido activo — resuélvelo antes de fusionar' });

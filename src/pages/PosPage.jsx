@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { useDialogos } from '../context/DialogosContext';
 import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto, getMesas } from '../lib/api';
 import { useCajaAbierta } from '../hooks/useCajaAbierta';
 import { debeEnfocarBusqueda } from '../lib/venta';
@@ -14,6 +15,7 @@ import ModalComboBebida from '../components/ModalComboBebida';
 import ModalCustomItem from '../components/ModalCustomItem';
 import ModalQR from '../components/ModalQR';
 import ModalCuentas from '../components/ModalCuentas';
+import ModalCobrado from '../components/ModalCobrado';
 
 /* ── localStorage keys ── */
 const LS_CART      = 'pos_v1_cart';
@@ -21,8 +23,6 @@ const LS_PAGO      = 'pos_v1_tipopago';
 const LS_DOMICILIO = 'pos_v1_domicilio';
 const LS_COSTO_DOM = 'pos_v1_costo_domicilio';
 const LS_ULTIMO_RECIBO = 'pos_v1_ultimo_recibo';
-const LS_IMPRIMIR_COPIA = 'pos_v1_imprimir_copia';
-const LS_ENVIAR_WHATSAPP = 'pos_v1_enviar_whatsapp';
 
 const formatCOP = (v) =>
   v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
@@ -33,7 +33,7 @@ function construirTextoFactura(recibo) {
   const subtotal = total - propina - costoDomicilio;
   const lineas = [
     '🍕 *Pizzería Don Peñolinni*',
-    `Orden #${ordenNumero} · ${fechaHora}`,
+    `Orden ${ordenNumero} · ${fechaHora}`,
     esDomicilio ? 'Domicilio' : mesa ? `Mesa: ${mesa}` : 'Venta mostrador',
     '',
     ...cart.map((i) => `${i.cantidad}x ${i.nombre} — ${formatCOP(i.precio * i.cantidad)}`),
@@ -50,9 +50,8 @@ function construirTextoFactura(recibo) {
   return lineas.join('\n');
 }
 
-/** Pide el número del cliente y abre WhatsApp con la factura ya redactada, lista para enviar */
-function enviarPorWhatsApp(recibo) {
-  const numeroCrudo = prompt('Número de WhatsApp del cliente (ej: 3001234567):');
+/** Abre WhatsApp con la factura ya redactada para el número dado, lista para enviar */
+function enviarPorWhatsApp(recibo, numeroCrudo) {
   if (!numeroCrudo) return;
   let digitos = numeroCrudo.replace(/\D/g, '');
   if (digitos.length === 10) digitos = '57' + digitos; // celular colombiano sin indicativo
@@ -71,6 +70,11 @@ export default function PosPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { usuario } = useAuth();
+  const { avisar, pedirTexto } = useDialogos();
+  const pedirWhatsApp = useCallback(async (recibo) => {
+    const numero = await pedirTexto({ titulo: 'Enviar por WhatsApp', etiqueta: 'Número del cliente', placeholder: 'Ej: 3001234567', inputMode: 'tel', aceptar: 'Abrir WhatsApp' });
+    enviarPorWhatsApp(recibo, numero);
+  }, [pedirTexto]);
   const { cajaAbierta, cargandoCaja } = useCajaAbierta();
   const cajaCerrada = !cargandoCaja && !cajaAbierta;
   const puedeAbrirCaja = ['admin', 'cajero'].includes(usuario?.rol);
@@ -106,13 +110,15 @@ export default function PosPage() {
   const [esDomicilio, setEsDomicilio]       = useState(() => lsRead(LS_DOMICILIO, false));
   const [costoDomicilio, setCostoDomicilio] = useState(() => lsRead(LS_COSTO_DOM, ''));
   const [conPropina, setConPropina]         = useState(false);
-  const [imprimirCopia, setImprimirCopia]   = useState(() => lsRead(LS_IMPRIMIR_COPIA, false));
-  const [enviarWhatsapp, setEnviarWhatsapp] = useState(() => lsRead(LS_ENVIAR_WHATSAPP, false));
   const [mesa, setMesa]                     = useState('');
 
   /* ── Ultimo Recibo ── */
   const [ultimoRecibo, setUltimoRecibo] = useState(() => lsRead(LS_ULTIMO_RECIBO, null));
-  const [isReprinting, setIsReprinting] = useState(false);
+  // null | 'original' | 'copia': qué versión del último recibo está en la ventana de impresión.
+  const [imprimiendo, setImprimiendo] = useState(null);
+  // Recibo recién cobrado: abre la confirmación con las opciones de imprimir y enviar.
+  const [cobrado, setCobrado] = useState(null);
+  const [impresion, setImpresion] = useState(null);
 
   /* ── Checkout extra data ── */
   const [montoEntregado, setMontoEntregado] = useState('');
@@ -120,6 +126,10 @@ export default function PosPage() {
   const [cobroAbierto, setCobroAbierto] = useState(false);
   // "Mesa" elegida en el segmentado aunque todavía no haya número.
   const [quiereMesa, setQuiereMesa] = useState(false);
+  // Pedido para llevar de un cliente que espera (o ya comió) en una mesa: cuenta aparte, pero ligado a la mesa.
+  const [llevarEnMesa, setLlevarEnMesa] = useState(false);
+  // Cómo se paga un domicilio: 'transferencia' | 'efectivo_local' | 'domiciliario' (null = sin elegir).
+  const [domicilioModo, setDomicilioModo] = useState(null);
   // Abrir el cobro implica facturar ahora.
   const abrirCobro = useCallback(() => { setFacturarAhorita(true); setCobroAbierto(true); }, []);
   const cerrarCobro = useCallback(() => { setCobroAbierto(false); setFacturarAhorita(false); setMontoAbonar(""); }, []);
@@ -174,8 +184,6 @@ export default function PosPage() {
   useEffect(() => { localStorage.setItem(LS_DOMICILIO, JSON.stringify(esDomicilio)); }, [esDomicilio]);
   useEffect(() => { localStorage.setItem(LS_COSTO_DOM, JSON.stringify(costoDomicilio)); }, [costoDomicilio]);
   useEffect(() => { localStorage.setItem(LS_ULTIMO_RECIBO, JSON.stringify(ultimoRecibo)); }, [ultimoRecibo]);
-  useEffect(() => { localStorage.setItem(LS_IMPRIMIR_COPIA, JSON.stringify(imprimirCopia)); }, [imprimirCopia]);
-  useEffect(() => { localStorage.setItem(LS_ENVIAR_WHATSAPP, JSON.stringify(enviarWhatsapp)); }, [enviarWhatsapp]);
 
   /* ── Toast auto-dismiss ── */
   useEffect(() => {
@@ -268,7 +276,7 @@ export default function PosPage() {
   }, [edicionBloqueada]);
 
   const resetOrden = useCallback(() => {
-    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado(''); setQuiereMesa(false);
+    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado(''); setQuiereMesa(false); setDomicilioModo(null); setLlevarEnMesa(false);
     setFacturarAhorita(false); setMontoAbonar(''); setMontoPagadoHistorico(0); setEstadoOriginal('pendiente');
     setPedidoActivoId(null); setOrdenActivaNum(null); setModoEdicion(null); setMesaInfo(null);
   }, []);
@@ -279,7 +287,9 @@ export default function PosPage() {
     setOrdenActivaNum(pedidoDB.numero_orden);
     setMesa(pedidoDB.mesa_id ? String(pedidoDB.mesa_id) : '');
     setQuiereMesa(Boolean(pedidoDB.mesa_id));
+    setLlevarEnMesa(pedidoDB.tipo === 'mostrador' && Boolean(pedidoDB.mesa_id));
     setEsDomicilio(pedidoDB.tipo === 'domicilio');
+    setDomicilioModo(pedidoDB.domicilio_modo || null);
     setTipoPago(pedidoDB.metodo_pago || 'efectivo');
     setMontoPagadoHistorico(pedidoDB.monto_pagado || 0);
     setEstadoOriginal(pedidoDB.estado || 'pendiente');
@@ -309,7 +319,8 @@ export default function PosPage() {
     } else if (st.mesaId) {
       resetOrden();
       setMesa(String(st.mesaId));
-      setQuiereMesa(true);
+      setQuiereMesa(!st.paraLlevar);
+      setLlevarEnMesa(Boolean(st.paraLlevar));
     }
 
     if (st.mesaId) {
@@ -329,7 +340,7 @@ export default function PosPage() {
   const procesarPedidoDB = async (estado, registrarPago = false) => {
     const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
     const prop = conPropina ? Math.round(sub * 0.10) : 0;
-    const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
+    const dom  = esDomicilio && domicilioModo !== 'domiciliario' ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
     const tot  = sub + prop + dom;
 
     // Un ítem de combo se manda como 2 líneas adyacentes: el combo (precio completo)
@@ -379,13 +390,15 @@ export default function PosPage() {
       mesa_id: mesa ? parseInt(mesa, 10) : null,
       usuario_id: usuario?.id,
       estado,
-      tipo: esDomicilio ? 'domicilio' : (mesa ? 'mesa' : 'mostrador'),
+      tipo: esDomicilio ? 'domicilio' : (mesa && !llevarEnMesa ? 'mesa' : 'mostrador'),
       subtotal: sub,
       impuestos: 0,
       total: tot,
       propina: prop,
-      costo_domicilio: dom,
+      // Se guarda el costo real aunque lo cobre el domiciliario, para que quede registrado.
+      costo_domicilio: esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0,
       metodo_pago: tipoPago,
+      domicilio_modo: esDomicilio ? domicilioModo : null,
       pago_actual,
       items: itemsDB,
       modo: modoEdicion || 'cobrar',
@@ -403,69 +416,48 @@ export default function PosPage() {
 
     try {
       // 1. Guardar en BD. Si ya existe mantenemos su estado. Si es nuevo, 'pendiente' para que vaya a cocina.
-      await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente', true);
+      // El comprobante lleva el número real del pedido (DP-0001), no el provisional de la pantalla.
+      const guardado = await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente', true);
 
       // 2. Imprimir recibo
       const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
       const prop = conPropina ? Math.round(sub * 0.10) : 0;
-      const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
+      const dom  = esDomicilio && domicilioModo !== 'domiciliario' ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
       const tot = sub + prop + dom;
       const saldoRestante = tot - montoPagadoHistorico;
       const abonoRaw = parseInt(String(montoAbonar).replace(/\D/g, ''));
       const pago_actual = facturarAhorita ? (!isNaN(abonoRaw) ? abonoRaw : saldoRestante) : 0;
 
       const recibo = {
-        cart, total: tot, ordenNumero, fechaHora,
+        cart, total: tot, ordenNumero: guardado?.numero_orden || ordenNumero, fechaHora,
         tipoPago, esDomicilio, propina: prop, costoDomicilio: dom, mesa,
         montoEntregado: tipoPago === 'efectivo' ? (parseInt(montoEntregado.toString().replace(/\D/g, '')) || 0) : 0,
         pagoActual: pago_actual,
         montoPagadoHistorico,
       };
       setUltimoRecibo(recibo);
-
-      if (enviarWhatsapp) enviarPorWhatsApp(recibo);
-
-      setTimeout(() => {
-        window.print();
-        if (imprimirCopia) {
-          setIsReprinting(true);
-          setTimeout(() => {
-            window.print();
-            setTimeout(() => { setIsReprinting(false); resetOrden(); setCobroAbierto(false); setIsProcesando(false); }, 100);
-          }, 150);
-        } else {
-          setTimeout(() => { resetOrden(); setCobroAbierto(false); setIsProcesando(false); }, 100);
-        }
-      }, 100);
+      resetOrden();
+      setCobroAbierto(false);
+      setIsProcesando(false);
+      setImpresion(null);
+      setCobrado(recibo);
+      setToastMsg(`✅ Cobro registrado · ${formatCOP(pago_actual)}`);
     } catch (err) {
       console.error('Error al cobrar:', err);
-      alert(err?.message || 'Error al guardar el pedido en la base de datos');
+      avisar(err?.message || 'Error al guardar el pedido en la base de datos');
       setIsProcesando(false);
     }
-  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, imprimirCopia, enviarWhatsapp, montoEntregado, resetOrden, usuario, facturarAhorita, montoAbonar, costoDomicilio, montoPagadoHistorico]);
+  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, montoEntregado, resetOrden, usuario, facturarAhorita, montoAbonar, costoDomicilio, domicilioModo, montoPagadoHistorico, llevarEnMesa]);
 
   const handleEnviarCocina = useCallback(async () => {
-    if (cart.length === 0 || isProcesando || edicionBloqueada) return;
+    if (cart.length === 0 || isProcesando || edicionBloqueada || cajaCerrada) return;
     setIsProcesando(true);
 
     try {
       // 1. Guardar en BD (mantenemos su estado original si existe, o 'pendiente')
       await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente');
 
-      // 2. Enviar por WhatsApp si el toggle está activo (no solo al cobrar —
-      // el mesero puede querer mandarle el pedido al cliente sin facturar todavía)
-      if (enviarWhatsapp) {
-        const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
-        const prop = conPropina ? Math.round(sub * 0.10) : 0;
-        const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
-        enviarPorWhatsApp({
-          cart, total: sub + prop + dom, ordenNumero, fechaHora,
-          tipoPago, esDomicilio, propina: prop, costoDomicilio: dom, mesa,
-          pagoActual: 0, montoPagadoHistorico,
-        });
-      }
-
-      // 3. Feedback visual y reset
+      // 2. Feedback visual y reset
       setToastMsg('👨‍🍳 Pedido enviado a cocina');
       setTimeout(() => {
         resetOrden();
@@ -473,23 +465,26 @@ export default function PosPage() {
       }, 500);
     } catch (err) {
       console.error('Error al enviar:', err);
-      alert(err?.message || 'Error al enviar el pedido');
+      avisar(err?.message || 'Error al enviar el pedido');
       setIsProcesando(false);
     }
-  }, [cart, isProcesando, edicionBloqueada, conPropina, tipoPago, esDomicilio, costoDomicilio, mesa, enviarWhatsapp, ordenNumero, fechaHora, montoPagadoHistorico, resetOrden, usuario]);
+  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, tipoPago, esDomicilio, costoDomicilio, mesa, ordenNumero, fechaHora, montoPagadoHistorico, resetOrden, usuario, llevarEnMesa]);
 
-  const handleReimprimir = useCallback(() => {
+  /** Abre la ventana de impresión con el último recibo; cancelarla no afecta el cobro. */
+  const imprimirRecibo = useCallback((tipo) => {
     if (!ultimoRecibo) return;
-    setIsReprinting(true);
+    setImprimiendo(tipo);
     setTimeout(() => {
-      window.print();
-      setTimeout(() => setIsReprinting(false), 500);
+      window.print(); // bloquea hasta que se cierra la ventana de impresión
+      setImprimiendo(null);
+      setImpresion(tipo);
     }, 150);
   }, [ultimoRecibo]);
+  const handleReimprimir = useCallback(() => imprimirRecibo('copia'), [imprimirRecibo]);
 
   const handleEnviarWhatsApp = useCallback(() => {
     if (!ultimoRecibo) return;
-    enviarPorWhatsApp(ultimoRecibo);
+    pedirWhatsApp(ultimoRecibo);
   }, [ultimoRecibo]);
 
   /* ── Atajos de teclado y Accesibilidad ── */
@@ -498,7 +493,7 @@ export default function PosPage() {
 
     const onKey = (e) => {
       // Con el modal de cobro abierto, el teclado es suyo (Esc y Tab los maneja él).
-      if (cobroAbierto) return;
+      if (cobroAbierto || cobrado) return;
       // "/" enfoca el buscador (salvo que se esté escribiendo)
       if (debeEnfocarBusqueda(e)) {
         e.preventDefault();
@@ -642,7 +637,7 @@ export default function PosPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCancelar, showQR, cobroAbierto, abrirCobro, edicionBloqueada, cajaCerrada]);
+  }, [isProcesando, cart.length, productoVariante, cartDrawerOpen, mostrarAtajos, handleCancelar, showQR, cobroAbierto, cobrado, abrirCobro, edicionBloqueada, cajaCerrada]);
 
   /* ── Filtrado ── */
   const productosFiltrados = useMemo(() =>
@@ -656,7 +651,8 @@ export default function PosPage() {
 
     const subtotal   = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
     const propina    = conPropina ? Math.round(subtotal * 0.10) : 0;
-    const domicilio  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
+    // En modo 'domiciliario' el domicilio no es venta del local: él lo cobra al cliente.
+    const domicilio  = esDomicilio && domicilioModo !== 'domiciliario' ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
     const total      = subtotal + propina + domicilio;
   const totalItems = cart.reduce((acc, i) => acc + i.cantidad, 0);
 
@@ -666,11 +662,11 @@ export default function PosPage() {
   return (
     <div data-theme={theme} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* ── TICKET INVISIBLE (Solo Imprime) ── */}
-      {isReprinting && ultimoRecibo ? (
+      {imprimiendo && ultimoRecibo ? (
         <TicketImpresion cart={ultimoRecibo.cart} total={ultimoRecibo.total} ordenNumero={ultimoRecibo.ordenNumero}
           fechaHora={ultimoRecibo.fechaHora} tipoPago={ultimoRecibo.tipoPago} esDomicilio={ultimoRecibo.esDomicilio}
           propina={ultimoRecibo.propina} costoDomicilio={ultimoRecibo.costoDomicilio || 0}
-          mesa={ultimoRecibo.mesa} montoEntregado={ultimoRecibo.montoEntregado} isCopia={true} 
+          mesa={ultimoRecibo.mesa} montoEntregado={ultimoRecibo.montoEntregado} isCopia={imprimiendo === 'copia'} 
           pagoActual={ultimoRecibo.pagoActual} montoPagadoHistorico={ultimoRecibo.montoPagadoHistorico} />
       ) : (
         <TicketImpresion cart={cart} total={total} ordenNumero={ordenActivaNum || ordenNumero}
@@ -705,14 +701,15 @@ export default function PosPage() {
         saldoRestante={total - montoPagadoHistorico}
         tipoPago={tipoPago} setTipoPago={setTipoPago}
         esDomicilio={esDomicilio} costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+        domicilioModo={domicilioModo} setDomicilioModo={setDomicilioModo}
         facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
         montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
         montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
-        imprimirCopia={imprimirCopia} setImprimirCopia={setImprimirCopia}
-        enviarWhatsapp={enviarWhatsapp} setEnviarWhatsapp={setEnviarWhatsapp}
         isProcesando={isProcesando}
         onConfirmar={handleCobrar}
       />
+      <ModalCobrado recibo={cobrado} impresion={impresion} onImprimir={imprimirRecibo}
+        onWhatsApp={() => pedirWhatsApp(cobrado)} onCerrar={() => setCobrado(null)} />
       {showQR && <ModalQR onCerrar={() => setShowQR(false)} />}
 
       {showCuentas && (
@@ -878,7 +875,7 @@ export default function PosPage() {
           {/* ── Filtros de categoría (chips) ── */}
           <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3"
             style={{ background: 'var(--bg-surf5)', borderBottom: '1px solid var(--border-1)' }}>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 sin-barra">
               {categoriasMenu.map((cat, idx) => {
                 const activo = categoriaActiva === cat.id;
                 const conteo = cat.id === 'Todos'
@@ -939,9 +936,9 @@ export default function PosPage() {
             onDecrementar={handleDecrementar} onCancelar={handleCancelar}
             onAbrirCobro={abrirCobro} quiereMesa={quiereMesa} setQuiereMesa={setQuiereMesa} mesas={mesas} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
             esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
-            costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+            costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio} domicilioModo={domicilioModo}
             conPropina={conPropina} setConPropina={setConPropina}
-            mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
+            mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} llevarEnMesa={llevarEnMesa} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
             />
         </div>
@@ -1004,9 +1001,9 @@ export default function PosPage() {
               onEnviarCocina={handleEnviarCocina}
               isProcesando={isProcesando}
               esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
-              costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+              costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio} domicilioModo={domicilioModo}
               conPropina={conPropina} setConPropina={setConPropina}
-              mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
+              mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} llevarEnMesa={llevarEnMesa} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
               isDrawer
               onCerrar={() => setCartDrawerOpen(false)}

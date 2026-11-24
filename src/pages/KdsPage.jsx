@@ -1,466 +1,243 @@
 // src/pages/KdsPage.jsx
-// Kitchen Display System (Cocina) — Recibe pedidos en tiempo real
+// Cocina: tres columnas por estado, del pedido más antiguo al más nuevo.
+// Los cancelados salen de las columnas y quedan en una franja arriba hasta que el cocinero los confirma.
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { getPedidosPendientes, actualizarEstadoPedido } from '../lib/api';
+import { useDialogos } from '../context/DialogosContext';
+import { getPedidosCocina, actualizarEstadoPedido } from '../lib/api';
 import socket from '../lib/socket';
 
-const formatCOP = (v) =>
-  (v || 0).toLocaleString('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
+const COLUMNAS = [
+  { estado: 'pendiente', titulo: 'Por empezar', ayuda: 'Nuevos, del más antiguo al más reciente', color: '#8FB8FF', fondo: '#1C2333', accion: 'Empezar a preparar', siguiente: 'en_preparacion', vacio: 'No hay pedidos nuevos.' },
+  { estado: 'en_preparacion', titulo: 'En preparación', ayuda: 'Ya los estás cocinando', color: '#F2B33D', fondo: '#2A2416', accion: 'Marcar listo', siguiente: 'listo', vacio: 'Nada en preparación.' },
+  { estado: 'listo', titulo: 'Listos para entregar', ayuda: 'Esperando al mesero o al domiciliario', color: '#4FB38A', fondo: '#16271F', accion: 'Entregado', siguiente: 'entregado', vacio: 'Nada esperando entrega.' },
+];
 
-const formatHora = (isoStr) => {
-  if (!isoStr) return '';
-  return new Date(isoStr).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
-};
+const COLOR_DESTINO = { mesa: '#8FB8FF', domicilio: '#FFB37A', mostrador: '#9EE3C4' };
+
+const fecha = (s) => (s ? new Date(String(s).replace(' ', 'T')) : new Date());
+const hora = (s) => fecha(s).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' });
+
+function destinoPedido(p) {
+  if (p.tipo === 'domicilio') return 'Domicilio';
+  if (p.tipo === 'mesa') return `Mesa ${p.mesa_numero ?? ''}`.trim();
+  return p.mesa_numero ? `Para llevar · Mesa ${p.mesa_numero}` : 'Para llevar';
+}
+
+const firmaItems = (p) => (p.items || []).map((i) => `${i.cantidad}|${i.nombre_display}|${i.notas || ''}`).sort().join('§');
+
+const leer = (clave, def) => { try { return JSON.parse(localStorage.getItem(clave)) ?? def; } catch { return def; } };
+const guardar = (clave, v) => { try { localStorage.setItem(clave, JSON.stringify(v)); } catch { /* sin almacenamiento */ } };
 
 export default function KdsPage() {
   const navigate = useNavigate();
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
+  const esAdmin = usuario?.rol === 'admin';
 
   const [pedidos, setPedidos] = useState([]);
-  const [horaActual, setHoraActual] = useState(new Date());
-  const [pedidoDetalle, setPedidoDetalle] = useState(null); // Modal detalle
+  const [ahora, setAhora] = useState(() => new Date());
+  const [modificados, setModificados] = useState({}); // id → momento en que cambió
+  const [vistos, setVistos] = useState(() => leer('kds_cancelados_vistos', []));
+  const [menu, setMenu] = useState(null);
 
-  // Reloj en vivo
   useEffect(() => {
-    const timer = setInterval(() => setHoraActual(new Date()), 1000);
-    return () => clearInterval(timer);
+    const t = setInterval(() => setAhora(new Date()), 15000);
+    return () => clearInterval(t);
   }, []);
 
-  // Cargar pedidos iniciales
-  useEffect(() => {
-    let mounted = true;
-    getPedidosPendientes()
-      .then((data) => {
-        if (mounted) {
-          const activos = (data || []).filter(p => ['pendiente', 'en_preparacion', 'listo'].includes(p.estado));
-          setPedidos(activos);
-        }
-      })
-      .catch((err) => console.error('Error cargando pedidos KDS:', err));
-    return () => { mounted = false; };
-  }, []);
+  const cargar = useCallback(() => getPedidosCocina()
+    .then((data) => {
+      // Si los productos de un pedido cambiaron desde la última vez, se marca como modificado.
+      const firmas = leer('kds_firmas', {});
+      const cambios = {};
+      const nuevas = {};
+      for (const p of data) {
+        const f = firmaItems(p);
+        if (firmas[p.id] && firmas[p.id] !== f && p.estado !== 'cancelado') cambios[p.id] = Date.now();
+        nuevas[p.id] = f;
+      }
+      guardar('kds_firmas', nuevas);
+      if (Object.keys(cambios).length) setModificados((m) => ({ ...m, ...cambios }));
+      setPedidos(data);
+    })
+    .catch((err) => console.error('Error cargando pedidos de cocina:', err)), []);
 
-  // WebSockets: Unirse a sala_cocina + escuchar eventos
   useEffect(() => {
-    // Unirse a sala_cocina para recibir todos los pedidos nuevos del sistema
+    cargar();
     socket.emit('unirse_sala', 'cocina');
-
-    const onNuevoPedido = (pedido) => {
-      if (['pendiente', 'en_preparacion', 'listo'].includes(pedido.estado)) {
-        setPedidos((prev) => {
-          // Evitar duplicados si el pedido ya existe
-          if (prev.find(p => p.id === pedido.id)) return prev;
-          return [...prev, { ...pedido, recibidoEn: Date.now() }];
-        });
-        const audio = new Audio('/notification.mp3');
-        audio.play().catch(() => {});
-      }
+    const onNuevo = () => {
+      new Audio('/notification.mp3').play().catch(() => {});
+      cargar();
     };
-
-    const onPedidoActualizado = (updatedData) => {
-      const { id, estado } = updatedData;
-      if (['entregado', 'pagado', 'cancelado'].includes(estado)) {
-        setPedidos((prev) => prev.filter((p) => p.id !== id));
-        // Si el modal estaba abierto con este pedido, cerrarlo
-        setPedidoDetalle((prev) => (prev?.id === id ? null : prev));
-      } else {
-        setPedidos((prev) => prev.map((p) => p.id === id ? { ...p, ...updatedData } : p));
-        // Actualizar el modal si estaba abierto
-        setPedidoDetalle((prev) => (prev?.id === id ? { ...prev, ...updatedData } : prev));
-      }
-    };
-
-    socket.on('nuevo_pedido', onNuevoPedido);
-    socket.on('pedido_actualizado', onPedidoActualizado);
+    socket.on('nuevo_pedido', onNuevo);
+    socket.on('pedido_actualizado', cargar);
     return () => {
-      socket.off('nuevo_pedido', onNuevoPedido);
-      socket.off('pedido_actualizado', onPedidoActualizado);
+      socket.off('nuevo_pedido', onNuevo);
+      socket.off('pedido_actualizado', cargar);
     };
-  }, []);
+  }, [cargar]);
 
-  // Avanzar estado del pedido
-  const handleAvanzarEstado = useCallback(async (pedido) => {
-    let siguiente = 'en_preparacion';
-    if (pedido.estado === 'en_preparacion') siguiente = 'listo';
-    else if (pedido.estado === 'listo') siguiente = 'entregado';
-
-    // Optimistic UI update
-    if (siguiente === 'entregado') {
-      setPedidos((prev) => prev.filter(p => p.id !== pedido.id));
-      setPedidoDetalle(null);
-    } else {
-      setPedidos((prev) => prev.map(p => p.id === pedido.id ? { ...p, estado: siguiente } : p));
-      setPedidoDetalle((prev) => (prev?.id === pedido.id ? { ...prev, estado: siguiente } : prev));
-    }
-
+  const avanzar = useCallback(async (pedido, siguiente) => {
+    setMenu(null);
+    setModificados((m) => { const resto = { ...m }; delete resto[pedido.id]; return resto; });
+    setPedidos((prev) => siguiente === 'entregado'
+      ? prev.filter((p) => p.id !== pedido.id)
+      : prev.map((p) => (p.id === pedido.id ? { ...p, estado: siguiente } : p)));
     try {
       await actualizarEstadoPedido(pedido.id, siguiente);
     } catch (err) {
-      console.error('Error al actualizar estado:', err);
+      avisar('No se pudo cambiar el estado: ' + (err?.message || 'error desconocido'));
+      cargar();
     }
-  }, []);
+  }, [avisar, cargar]);
 
-  // Cancelar un pedido ya enviado a cocina (solo admin) — para emergencias de
-  // último momento, ej. el cliente se tuvo que ir. Si ya estaba pagado, revierte
-  // el descuento de inventario automáticamente (lo hace el backend).
-  const handleCancelar = useCallback(async (pedido) => {
-    if (!confirm(`¿Cancelar el pedido ${pedido.numero_orden}? Esta acción no se puede deshacer.`)) return;
-
-    setPedidos((prev) => prev.filter(p => p.id !== pedido.id));
-    setPedidoDetalle((prev) => (prev?.id === pedido.id ? null : prev));
-
+  const cancelar = useCallback(async (pedido) => {
+    setMenu(null);
+    if (!(await confirmar({ titulo: `Cancelar ${destinoPedido(pedido)} · ${pedido.numero_orden}`, mensaje: 'Úsalo solo si el cliente lo canceló y el cajero no lo hizo. No se puede deshacer.', aceptar: 'Marcar como cancelado', cancelar: 'Volver', peligro: true }))) return;
     try {
       await actualizarEstadoPedido(pedido.id, 'cancelado');
+      cargar();
     } catch (err) {
-      console.error('Error al cancelar pedido:', err);
-      alert('No se pudo cancelar el pedido: ' + (err?.message || 'error desconocido'));
+      avisar('No se pudo cancelar el pedido: ' + (err?.message || 'error desconocido'));
     }
-  }, []);
+  }, [avisar, confirmar, cargar]);
+
+  const entendido = (id) => {
+    const nuevos = [...vistos, id].slice(-200);
+    setVistos(nuevos);
+    guardar('kds_cancelados_vistos', nuevos);
+  };
+
+  const cancelados = pedidos.filter((p) => p.estado === 'cancelado' && !vistos.includes(p.id));
+  const activos = pedidos.filter((p) => p.estado !== 'cancelado');
+  const minutos = (p) => Math.max(0, Math.floor((ahora - fecha(p.created_at)) / 60000));
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0a0a0f' }}>
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 shrink-0"
-        style={{ borderBottom: '1px solid #1e1e2d', background: '#13131b' }}>
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/hub')}
-            className="w-10 h-10 rounded-xl flex items-center justify-center
-                       text-xl transition-colors duration-150 active:scale-95"
-            style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#94a3b8' }}
-          >←</button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600
-                            flex items-center justify-center text-xl shadow-md">👨‍🍳</div>
-            <div>
-              <h1 className="text-lg font-extrabold text-white tracking-tight leading-none">Cocina (KDS)</h1>
-              <p className="text-xs mt-1" style={{ color: '#64748b' }}>
-                {pedidos.length} {pedidos.length === 1 ? 'pedido pendiente' : 'pedidos pendientes'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="text-right">
-          <p className="text-2xl font-mono font-bold text-orange-400">
-            {horaActual.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </p>
-          <p className="text-xs" style={{ color: '#64748b' }}>{usuario?.nombre}</p>
-        </div>
-      </header>
-
-      {/* Main Board */}
-      <main className="flex-1 overflow-x-auto overflow-y-hidden p-6">
-        {pedidos.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center gap-4">
-            <div className="w-24 h-24 rounded-full flex items-center justify-center text-5xl"
-                 style={{ background: '#13131b', border: '1px dashed #2a2a3a' }}>
-              🍳
-            </div>
-            <p className="text-xl font-bold text-white">Sin pedidos pendientes</p>
-            <p className="text-sm" style={{ color: '#64748b' }}>Esperando comandas...</p>
-          </div>
-        ) : (
-          <div className="flex gap-6 h-full items-start">
-            {pedidos.map((pedido) => (
-              <TicketKDS
-                key={pedido.id}
-                pedido={pedido}
-                onAvanzar={handleAvanzarEstado}
-                onVerDetalle={() => setPedidoDetalle(pedido)}
-                onCancelar={usuario?.rol === 'admin' ? handleCancelar : null}
-              />
-            ))}
-          </div>
-        )}
-      </main>
-
-      {/* Modal de detalles del pedido */}
-      {pedidoDetalle && (
-        <ModalDetalleKDS
-          pedido={pedidoDetalle}
-          onCerrar={() => setPedidoDetalle(null)}
-          onAvanzar={handleAvanzarEstado}
-          onCancelar={usuario?.rol === 'admin' ? handleCancelar : null}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Ticket individual ────────────────────────────────────────────────────────
-
-function TicketKDS({ pedido, onAvanzar, onVerDetalle, onCancelar }) {
-  const [minutos, setMinutos] = useState(0);
-
-  // Actualizar timer
-  useEffect(() => {
-    const update = () => {
-      const diffMs = Date.now() - pedido.recibidoEn;
-      setMinutos(Math.floor(diffMs / 60000));
-    };
-    update();
-    const timer = setInterval(update, 10000); // Cada 10s
-    return () => clearInterval(timer);
-  }, [pedido.recibidoEn]);
-
-  // Colores de alerta según el tiempo
-  let alertColor = 'text-emerald-400';
-  let bgColor = '#13131b';
-  let borderColor = '#2a2a3a';
-
-  if (minutos >= 15) {
-    alertColor = 'text-red-400';
-    borderColor = 'rgba(239,68,68,0.5)';
-    bgColor = 'rgba(239,68,68,0.05)';
-  } else if (minutos >= 8) {
-    alertColor = 'text-amber-400';
-    borderColor = 'rgba(245,158,11,0.5)';
-  }
-
-  // Total calculado: del payload o suma de items
-  const totalCalculado = pedido.total
-    || (pedido.items || []).reduce((acc, it) => acc + (it.subtotal || it.precio_unitario * it.cantidad || 0), 0);
-
-  return (
-    <div className="shrink-0 w-[320px] max-h-full flex flex-col rounded-2xl shadow-xl overflow-hidden animate-[fadeIn_0.3s_ease-out]"
-      style={{ background: bgColor, border: `1px solid ${borderColor}` }}>
-
-      {/* Ticket Header */}
-      <div className="px-4 py-3 flex justify-between items-start"
-           style={{ borderBottom: '1px dashed #2a2a3a', background: 'rgba(0,0,0,0.2)' }}>
-        <div>
-          <h2 className="text-xl font-black text-white">{pedido.numero_orden}</h2>
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`text-sm font-bold ${alertColor}`}>⏱️ {minutos} min</span>
-            <span className="text-xs" style={{ color: '#64748b' }}>{formatHora(pedido.timestamp)}</span>
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
-          {pedido.tipo === 'mesa' ? (
-            <div className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-1 rounded text-xs font-bold uppercase">
-              Mesa {pedido.mesa_id}
-            </div>
-          ) : pedido.tipo === 'domicilio' ? (
-            <div className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-1 rounded text-xs font-bold uppercase">
-              🛵 Domicilio
-            </div>
-          ) : (
-            <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded text-xs font-bold uppercase">
-              Para llevar
-            </div>
-          )}
-          {/* Total visible en el ticket */}
-          <span className="text-xs font-bold text-white/60">
-            {(0).toLocaleString('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).replace('0', totalCalculado.toLocaleString('es-CO'))}
+    <div className="min-h-screen flex flex-col" style={{ background: '#121318', color: '#F3F3F5' }}>
+      <header className="flex flex-wrap items-center gap-4 px-5 py-3" style={{ background: '#1A1C22', borderBottom: '1px solid #2D313B' }}>
+        <button onClick={() => navigate('/hub')} aria-label="Volver"
+          className="w-11 h-11 flex items-center justify-center rounded-[10px]" style={{ border: '1px solid #2D313B' }}>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xl font-extrabold">Cocina</span>
+          <span className="text-sm" style={{ color: '#A4A9B6' }}>
+            {activos.length === 0 ? 'Sin pedidos por preparar' : `${activos.length} ${activos.length === 1 ? 'pedido' : 'pedidos'} por entregar`}
           </span>
         </div>
-      </div>
-
-      {/* Ticket Items */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {pedido.items.map((item, idx) => (
-          <div key={idx} className="flex gap-3 text-base">
-            <div className="font-black text-orange-400">{item.cantidad}x</div>
-            <div className="flex-1">
-              <p className="font-bold text-white leading-tight">{item.nombre_display}</p>
-              {item.notas && (
-                <p className="text-xs text-red-400 font-bold mt-0.5 bg-red-400/10 inline-block px-1.5 py-0.5 rounded">
-                  ⚠️ {item.notas}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Actions */}
-      <div className="p-3 space-y-2" style={{ borderTop: '1px solid #2a2a3a' }}>
-        {/* Botón detalles */}
-        <button
-          onClick={onVerDetalle}
-          className="w-full py-2 rounded-xl text-xs font-semibold transition-all active:scale-95"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid #2a2a3a', color: '#94a3b8' }}
-        >
-          🔍 Ver detalles y monto
-        </button>
-        {/* Botón avanzar estado */}
-        <button
-          onClick={() => onAvanzar(pedido)}
-          className="w-full py-3 rounded-xl font-bold text-sm text-white shadow-lg active:scale-95 transition-all"
-          style={{
-            background: pedido.estado === 'pendiente'
-              ? 'linear-gradient(135deg, rgb(249,115,22), rgb(234,88,12))'
-              : pedido.estado === 'en_preparacion'
-              ? 'linear-gradient(135deg, rgb(16,185,129), rgb(5,150,105))'
-              : 'linear-gradient(135deg, rgb(59,130,246), rgb(37,99,235))'
-          }}
-        >
-          {pedido.estado === 'pendiente' ? '👨‍🍳 Iniciar Preparación' :
-           pedido.estado === 'en_preparacion' ? '✅ Marcar como Listo' :
-           '🛎️ Entregar'}
-        </button>
-        {/* Cancelación de último momento — solo visible para admin */}
-        {onCancelar && (
-          <button
-            onClick={() => onCancelar(pedido)}
-            className="w-full py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95"
-            style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171' }}
-          >
-            🗑️ Cancelar pedido
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Modal de detalles del pedido ─────────────────────────────────────────────
-
-function ModalDetalleKDS({ pedido, onCerrar, onAvanzar, onCancelar }) {
-  const subtotalItems = (pedido.items || []).reduce(
-    (acc, it) => acc + (it.subtotal || it.precio_unitario * it.cantidad || 0), 0
-  );
-  const subtotal  = pedido.subtotal  ?? subtotalItems;
-  const propina   = pedido.propina   ?? 0;
-  const domicilio = pedido.costo_domicilio ?? 0;
-  const total     = pedido.total     ?? (subtotalItems + propina + domicilio);
-
-  const estadoBadge = {
-    pendiente:      { label: 'Pendiente',      cls: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-    en_preparacion: { label: 'En preparación', cls: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-    listo:          { label: 'Listo',          cls: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-  }[pedido.estado] || { label: pedido.estado, cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
-      onClick={onCerrar}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-[fadeIn_0.2s_ease-out]"
-        style={{ background: '#13131b', border: '1px solid #2a2a3a', maxHeight: '90vh' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="flex items-start justify-between px-5 py-4"
-             style={{ borderBottom: '1px solid #2a2a3a', background: 'rgba(0,0,0,0.3)' }}>
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-2xl font-black text-white">{pedido.numero_orden}</h2>
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${estadoBadge.cls}`}>
-                {estadoBadge.label}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-xs" style={{ color: '#64748b' }}>
-              {pedido.tipo === 'mesa' && <span>🪑 Mesa {pedido.mesa_id}</span>}
-              {pedido.tipo === 'domicilio' && <span>🛵 Domicilio</span>}
-              {pedido.tipo === 'mostrador' && <span>🏪 Para llevar</span>}
-              {pedido.timestamp && <span>· {new Date(pedido.timestamp).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>}
-            </div>
-          </div>
-          <button
-            onClick={onCerrar}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-sm font-bold flex-shrink-0"
-            style={{ background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#94a3b8' }}
-          >✕</button>
+        <div className="flex-1" />
+        <div className="flex items-center gap-3.5 text-sm" style={{ color: '#C9CDD6' }}>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-[3px]" style={{ background: '#F2B33D' }} />8 min o más</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-[3px]" style={{ background: '#E8554E' }} />15 min o más</span>
         </div>
+        <span className="text-[28px] font-extrabold tabular-nums" style={{ color: 'var(--accent)' }}>
+          {ahora.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}
+        </span>
+      </header>
 
-        {/* Items detallados */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: '#475569' }}>
-            Ítems del pedido
-          </p>
-          {(pedido.items || []).map((item, idx) => {
-            const itemSubtotal = item.subtotal || item.precio_unitario * item.cantidad || 0;
-            return (
-              <div key={idx} className="flex items-start gap-3 py-2.5 rounded-xl px-3"
-                   style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1e1e2d' }}>
-                <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center
-                                text-sm font-black text-orange-400 flex-shrink-0">
-                  {item.cantidad}x
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-white text-sm leading-tight">{item.nombre_display}</p>
-                  {item.notas && (
-                    <p className="text-xs text-red-400 font-bold mt-1 bg-red-400/10 px-1.5 py-0.5 rounded inline-block">
-                      ⚠️ {item.notas}
-                    </p>
-                  )}
-                  {item.precio_unitario > 0 && (
-                    <p className="text-[11px] mt-0.5" style={{ color: '#64748b' }}>
-                      {item.cantidad} × {formatCOP(item.precio_unitario)}
-                    </p>
-                  )}
-                </div>
-                {itemSubtotal > 0 && (
-                  <span className="text-sm font-bold text-white/80 flex-shrink-0">
-                    {formatCOP(itemSubtotal)}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Totales */}
-        <div className="px-5 py-4 space-y-2" style={{ borderTop: '1px solid #2a2a3a', background: 'rgba(0,0,0,0.2)' }}>
-          <div className="flex justify-between text-sm" style={{ color: '#64748b' }}>
-            <span>Subtotal</span>
-            <span className="font-medium text-white/70">{formatCOP(subtotal)}</span>
-          </div>
-          {propina > 0 && (
-            <div className="flex justify-between text-sm text-orange-400">
-              <span>Propina (10%)</span>
-              <span className="font-medium">{formatCOP(propina)}</span>
-            </div>
-          )}
-          {domicilio > 0 && (
-            <div className="flex justify-between text-sm text-orange-400">
-              <span>🛵 Costo domicilio</span>
-              <span className="font-medium">{formatCOP(domicilio)}</span>
-            </div>
-          )}
-          <div className="flex justify-between items-center pt-2" style={{ borderTop: '1px solid #2a2a3a' }}>
-            <span className="text-base font-bold text-white">Total</span>
-            <span className="text-2xl font-extrabold text-emerald-400 tabular-nums">
-              {formatCOP(total)}
+      {cancelados.length > 0 && (
+        <section aria-label="Pedidos cancelados" role="alert"
+          className="mx-5 mt-4 flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-[14px]"
+          style={{ background: '#2A1616', border: '1px solid #5A2626' }}>
+          <span className="font-extrabold mr-1.5" style={{ color: '#FFB4AE' }}>Cancelados · no los prepares</span>
+          {cancelados.map((c) => (
+            <span key={c.id} className="inline-flex items-center gap-2 pl-3 pr-1 min-h-11 rounded-[10px] font-bold"
+              style={{ background: '#3A1A1A', color: '#FFD1CE' }}>
+              <span><s>{destinoPedido(c).toUpperCase()}</s> · {c.numero_orden}</span>
+              <button onClick={() => entendido(c.id)} className="h-9 px-3 rounded-lg text-sm font-extrabold"
+                style={{ background: '#FFD1CE', color: '#4A1D1D' }}>Entendido</button>
             </span>
-          </div>
-        </div>
+          ))}
+        </section>
+      )}
 
-        {/* Acción */}
-        <div className="px-5 pb-5">
-          <button
-            onClick={() => onAvanzar(pedido)}
-            className="w-full py-3.5 rounded-xl font-bold text-base text-white shadow-lg active:scale-95 transition-all"
-            style={{
-              background: pedido.estado === 'pendiente'
-                ? 'linear-gradient(135deg, rgb(249,115,22), rgb(234,88,12))'
-                : pedido.estado === 'en_preparacion'
-                ? 'linear-gradient(135deg, rgb(16,185,129), rgb(5,150,105))'
-                : 'linear-gradient(135deg, rgb(59,130,246), rgb(37,99,235))'
-            }}
-          >
-            {pedido.estado === 'pendiente' ? '👨‍🍳 Iniciar Preparación' :
-             pedido.estado === 'en_preparacion' ? '✅ Marcar como Listo' :
-             '🛎️ Entregar pedido'}
-          </button>
-          {/* Cancelación de último momento — solo visible para admin */}
-          {onCancelar && (
-            <button
-              onClick={() => onCancelar(pedido)}
-              className="w-full mt-2 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
-              style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171' }}
-            >
-              🗑️ Cancelar pedido
-            </button>
-          )}
-        </div>
-      </div>
+      <main className="flex-1 grid gap-4 px-5 py-4 items-start" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+        {COLUMNAS.map((col) => {
+          const lista = activos.filter((p) => p.estado === col.estado);
+          return (
+            <section key={col.estado} aria-label={col.titulo} className="flex flex-col gap-3 min-w-0">
+              <div className="flex items-center justify-between gap-2.5 px-3.5 py-3 rounded-[14px]"
+                style={{ background: col.fondo, borderTop: `4px solid ${col.color}` }}>
+                <div className="flex flex-col gap-0.5">
+                  <h2 className="m-0 text-lg font-extrabold">{col.titulo}</h2>
+                  <span className="text-[13px] opacity-85">{col.ayuda}</span>
+                </div>
+                <span className="min-w-10 h-10 px-2.5 rounded-full inline-flex items-center justify-center font-extrabold text-lg"
+                  style={{ background: col.color, color: '#121318' }}>{lista.length}</span>
+              </div>
+
+              {lista.map((p) => {
+                const min = minutos(p);
+                const mod = modificados[p.id];
+                const colorTiempo = min >= 15 ? '#E8554E' : min >= 8 ? '#F2B33D' : '#2D313B';
+                return (
+                  <article key={p.id} className="flex flex-col overflow-hidden rounded-2xl"
+                    style={{ background: '#1E2129', border: `2px solid ${mod ? '#F2B33D' : colorTiempo}`, borderLeft: `8px solid ${col.color}` }}>
+                    {mod && (
+                      <div role="status" className="px-3.5 py-2 font-extrabold text-[15px]" style={{ background: '#3B2A0C', color: '#FFD58A' }}>
+                        MODIFICADO hace {Math.max(0, Math.floor((ahora - mod) / 60000))} min · revisa los productos
+                      </div>
+                    )}
+                    <div className="flex items-start justify-between gap-3 px-3.5 pt-3.5 pb-2.5">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[26px] font-extrabold tracking-wide leading-tight" style={{ color: COLOR_DESTINO[p.tipo] || '#F3F3F5' }}>
+                          {destinoPedido(p).toUpperCase()}
+                        </span>
+                        <span className="text-sm" style={{ color: '#A4A9B6' }}>{p.numero_orden} · tomado {hora(p.created_at)}</span>
+                      </div>
+                      <span className="shrink-0 px-3 py-1.5 rounded-[10px] text-[22px] font-extrabold tabular-nums"
+                        style={min >= 15 ? { background: '#E8554E', color: '#1A0505' } : min >= 8 ? { background: '#F2B33D', color: '#1A1205' } : { background: '#2D313B', color: '#F3F3F5' }}>
+                        {min} min
+                      </span>
+                    </div>
+                    <ul className="flex flex-col gap-2 px-3.5 pb-3">
+                      {(p.items || []).map((it, i) => (
+                        <li key={i} className="flex flex-col gap-1">
+                          <span className="text-xl font-bold leading-tight">
+                            <span style={{ color: 'var(--accent)' }}>{it.cantidad}×</span> {it.nombre_display}
+                          </span>
+                          {it.notas && (
+                            <span className="self-start px-2.5 py-1 rounded-lg text-base font-extrabold" style={{ background: '#FFF3C4', color: '#3A2A00' }}>
+                              {it.notas}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex gap-2 px-3.5 pb-3.5">
+                      <button onClick={() => avanzar(p, col.siguiente)}
+                        className="flex-1 h-14 rounded-xl text-lg font-extrabold active:scale-[0.98] transition-transform"
+                        style={col.siguiente === 'entregado' ? { background: '#4FB38A', color: '#06140D' } : { background: 'var(--accent)', color: '#1A0E05' }}>
+                        {col.accion}
+                      </button>
+                      {esAdmin && (
+                        <button aria-label="Más opciones" aria-expanded={menu === p.id} onClick={() => setMenu(menu === p.id ? null : p.id)}
+                          className="w-14 h-14 shrink-0 flex items-center justify-center rounded-xl" style={{ border: '1px solid #3A3F4C', color: '#C9CDD6' }}>
+                          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
+                        </button>
+                      )}
+                    </div>
+                    {menu === p.id && (
+                      <div className="mx-3.5 mb-3.5 p-2.5 rounded-xl flex flex-col gap-1.5" style={{ border: '1px solid #3A3F4C' }}>
+                        <span className="text-[13px]" style={{ color: '#A4A9B6' }}>Solo si el cliente lo canceló y el cajero no lo hizo:</span>
+                        <button onClick={() => cancelar(p)} className="h-11 rounded-[10px] text-[15px] font-bold"
+                          style={{ border: '1px solid #7A2F2F', color: '#F08A84' }}>Marcar como cancelado</button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+
+              {lista.length === 0 && (
+                <p className="m-0 px-3 py-7 text-center rounded-[14px]" style={{ color: '#6B7080', border: '1px dashed #2D313B' }}>{col.vacio}</p>
+              )}
+            </section>
+          );
+        })}
+      </main>
     </div>
   );
 }

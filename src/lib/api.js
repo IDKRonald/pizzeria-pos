@@ -152,6 +152,11 @@ export function getPedidosPendientes() {
   return fetchApi('/pedidos');
 }
 
+/** Pedidos por entregar + cancelados recientes, del más antiguo al más nuevo */
+export function getPedidosCocina() {
+  return fetchApi('/pedidos?vista=cocina');
+}
+
 /**
  * Actualiza el estado de un pedido
  */
@@ -369,6 +374,19 @@ export function getCajaHistorial(filtros = {}) {
 // ── Estadísticas ─────────────────────────────────────────────
 
 /** Ventas totales por período { desde, hasta } (YYYY-MM-DD) */
+export function registrarMovimientoCaja(datos, usuarioId) {
+  return fetchApi('/caja/movimientos', { method: 'POST', body: JSON.stringify({ ...datos, usuario_id: usuarioId }) });
+}
+
+export function getPedidosEstadisticas(filtros = {}) {
+  const qs = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v !== '' && v != null)).toString();
+  return fetchApi(`/estadisticas/pedidos${qs ? `?${qs}` : ''}`);
+}
+
+export function getDetallePedidoEstadisticas(id) {
+  return fetchApi(`/estadisticas/pedidos/${id}`);
+}
+
 export function getEstadisticasVentas(filtros = {}) {
   const qs = new URLSearchParams(filtros).toString();
   return fetchApi(`/estadisticas/ventas${qs ? `?${qs}` : ''}`);

@@ -10,20 +10,24 @@ import socket from '../lib/socket';
 export function useCajaAbierta() {
   const [caja, setCaja] = useState(null);
   const [totales, setTotales] = useState(null);
+  const [pendientes, setPendientes] = useState([]);
+  const [movimientos, setMovimientos] = useState([]);
   const [cargando, setCargando] = useState(true);
 
   const refrescar = useCallback(() => {
     getCajaActual()
-      .then((d) => { setCaja(d.caja); setTotales(d.totales); })
-      .catch(() => { setCaja(null); setTotales(null); })
+      .then((d) => { setCaja(d.caja); setTotales(d.totales); setPendientes(d.pendientes || []); setMovimientos(d.movimientos || []); })
+      .catch(() => { setCaja(null); setTotales(null); setPendientes([]); setMovimientos([]); })
       .finally(() => setCargando(false));
   }, []);
 
   useEffect(() => {
     refrescar();
-    socket.on('caja_actualizada', refrescar);
-    return () => socket.off('caja_actualizada', refrescar);
+    // Los cobros cambian los totales: sin esto, el cuadre en pantalla quedaba viejo al cerrar.
+    const eventos = ['caja_actualizada', 'nuevo_pedido', 'pedido_actualizado'];
+    eventos.forEach((e) => socket.on(e, refrescar));
+    return () => eventos.forEach((e) => socket.off(e, refrescar));
   }, [refrescar]);
 
-  return { caja, totales, cajaAbierta: !!caja, cargandoCaja: cargando, refrescarCaja: refrescar };
+  return { caja, totales, pendientes, movimientos, cajaAbierta: !!caja, cargandoCaja: cargando, refrescarCaja: refrescar };
 }

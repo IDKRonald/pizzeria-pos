@@ -31,7 +31,13 @@ export function obtenerMiembrosGrupo(mesaId) {
   return db.prepare('SELECT id FROM mesas WHERE grupo_id = ?').all(mesa.grupo_id).map((m) => m.id);
 }
 
-const ESTADOS_NO_TERMINALES = ['pendiente', 'en_preparacion', 'listo', 'entregado'];
+/**
+ * Condición SQL de un pedido que todavía ocupa su mesa: no terminado en cocina, y no
+ * pagado por completo una vez listo o entregado (cobrar no cambia el estado de cocina).
+ * Es la única definición: la usan el estado de la mesa, su contador y su panel.
+ */
+export const SQL_PEDIDO_ACTIVO = `(estado IN ('pendiente', 'en_preparacion', 'listo', 'entregado')
+  AND NOT (monto_pagado >= total AND estado IN ('listo', 'entregado')))`;
 
 /**
  * Recalcula el estado agregado de la mesa (o su grupo completo) a partir de
@@ -50,9 +56,8 @@ export function sincronizarEstadoMesa(mesaId, io) {
   const placeholders = miembros.map(() => '?').join(',');
 
   const pedidosActivos = db.prepare(`
-    SELECT estado FROM pedidos
-    WHERE mesa_id IN (${placeholders}) AND estado IN (${ESTADOS_NO_TERMINALES.map(() => '?').join(',')})
-  `).all(...miembros, ...ESTADOS_NO_TERMINALES);
+    SELECT estado FROM pedidos WHERE mesa_id IN (${placeholders}) AND ${SQL_PEDIDO_ACTIVO}
+  `).all(...miembros);
 
   let nuevoEstado = 'libre';
   if (pedidosActivos.some((p) => p.estado === 'listo')) nuevoEstado = 'lista';

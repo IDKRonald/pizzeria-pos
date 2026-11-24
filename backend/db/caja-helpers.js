@@ -25,20 +25,37 @@ export function obtenerCajaAbierta() {
  * Totales de pagos reales entre [desde, hasta) — excluye pedidos cancelados.
  * Se usa tanto para el resumen en vivo (GET /caja/actual) como para el cierre
  * final, con la misma lógica exacta en ambos casos.
+ * Con `cajaId`, cuenta los pagos de esa caja; el rango de fechas queda solo para
+ * pagos viejos registrados antes de que existiera pagos.caja_id. Sin `cajaId`
+ * (reportes por fecha) cuenta todos los pagos del rango.
  */
-export function calcularTotalesPeriodo(desde, hasta) {
+export function calcularTotalesPeriodo(desde, hasta, cajaId = null) {
+  const enRango = 'p.created_at >= ? AND p.created_at < ?';
+  const filtro = cajaId ? `(p.caja_id = ? OR (p.caja_id IS NULL AND ${enRango}))` : enRango;
   const filas = db.prepare(`
     SELECT p.metodo_pago, SUM(p.monto) as total, COUNT(*) as cantidad
     FROM pagos p
     JOIN pedidos ped ON ped.id = p.pedido_id
-    WHERE ped.estado != 'cancelado' AND p.created_at >= ? AND p.created_at < ?
+    WHERE ped.estado != 'cancelado' AND ${filtro}
     GROUP BY p.metodo_pago
-  `).all(desde, hasta);
+  `).all(...(cajaId ? [cajaId, desde, hasta] : [desde, hasta]));
 
   const totales = {
     total_efectivo: 0, total_transferencia: 0, total_tarjeta_debito: 0,
     total_tarjeta_credito: 0, total_otros: 0, total_general: 0, cantidad_pagos: 0,
   };
+  // Salidas de efectivo de la caja: solo aplican cuando se calcula para una caja concreta.
+  totales.total_retiros = 0; totales.total_gastos = 0; totales.total_domiciliarios = 0;
+  if (cajaId) {
+    const salidas = db.prepare('SELECT tipo, SUM(monto) AS total FROM movimientos_caja WHERE caja_id = ? GROUP BY tipo').all(cajaId);
+    for (const s of salidas) {
+      if (s.tipo === 'retiro') totales.total_retiros = s.total;
+      else if (s.tipo === 'gasto') totales.total_gastos = s.total;
+      else totales.total_domiciliarios = s.total;
+    }
+  }
+  totales.total_salidas = totales.total_retiros + totales.total_gastos + totales.total_domiciliarios;
+
   for (const f of filas) {
     totales.total_general += f.total;
     totales.cantidad_pagos += f.cantidad;

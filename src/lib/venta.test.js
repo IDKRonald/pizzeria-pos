@@ -3,7 +3,24 @@ import assert from 'node:assert/strict';
 import {
   formatCOP, parseMonto, tipoOrden, aplicarTipoOrden, precioDesde, tonoProducto,
   billetesRapidos, calcularCambio, puedeConfirmarCobro, segundaMitadValida, debeEnfocarBusqueda,
+  miles, milesConDecimales, numeroDesdeMiles,
 } from './venta.js';
+
+test('miles pone el separador y deja vacío lo vacío', () => {
+  assert.equal(miles('1500000'), '1.500.000');
+  assert.equal(miles('$ 20.000'), '20.000');
+  assert.equal(miles(''), '');
+  assert.equal(miles(0), '0');
+});
+
+test('milesConDecimales admite coma decimal y numeroDesdeMiles la lee', () => {
+  assert.equal(milesConDecimales('12345,567'), '12.345,56');
+  assert.equal(milesConDecimales(',5'), '0,5');
+  assert.equal(milesConDecimales('12.345'), '12.345');
+  assert.equal(numeroDesdeMiles('12.345,5'), 12345.5);
+  assert.equal(numeroDesdeMiles('1.500.000'), 1500000);
+  assert.equal(numeroDesdeMiles(''), 0);
+});
 
 test('formatCOP da formato con símbolo de pesos', () => {
   assert.match(formatCOP(37000), /^\$\s?37\.000$/);

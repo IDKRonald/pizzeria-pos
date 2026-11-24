@@ -44,6 +44,7 @@ export default function CheckoutSidebar({
   esDomicilio,
   setEsDomicilio,
   costoDomicilio,
+  domicilioModo = null,
   setCostoDomicilio,
   conPropina,
   setConPropina,
@@ -53,6 +54,7 @@ export default function CheckoutSidebar({
   quiereMesa = false,
   setQuiereMesa = () => {},
   mesaInfo = null,
+  llevarEnMesa = false,
   edicionBloqueada = false,
   cajaCerrada = false,
   puedeAbrirCaja = false,
@@ -61,14 +63,16 @@ export default function CheckoutSidebar({
   onCerrar,
 }) {
   // quiereMesa vive en PosPage: "Mesa" elegida sin número todavía (tipoOrden diría "llevar").
-  const tipoDeducido = tipoOrden({ esDomicilio, mesa });
+  const tipoDeducido = llevarEnMesa ? 'llevar' : tipoOrden({ esDomicilio, mesa });
   const tipo = tipoDeducido === 'llevar' && quiereMesa ? 'mesa' : tipoDeducido;
   const tipoBloqueado = Boolean(mesaInfo) || edicionBloqueada;
 
   const subtotal   = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
   const propina    = conPropina ? Math.round(subtotal * 0.10) : 0;
   const domicilio  = esDomicilio ? parseMonto(costoDomicilio) : 0;
-  const total      = subtotal + propina + domicilio;
+  // Si el domiciliario paga el pedido, el domicilio lo cobra él: no suma al total del local.
+  const loCobraDomiciliario = domicilioModo === 'domiciliario';
+  const total      = subtotal + propina + (loCobraDomiciliario ? 0 : domicilio);
   const totalItems = cart.reduce((acc, item) => acc + item.cantidad, 0);
 
   const elegirTipo = (nuevo) => {
@@ -149,6 +153,12 @@ export default function CheckoutSidebar({
             );
           })}
         </div>
+
+        {llevarEnMesa && mesaInfo && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold" style={estiloInput}>
+            Para llevar · espera en Mesa {mesaInfo.numero}
+          </div>
+        )}
 
         {/* ── Mesa ── */}
         {tipo === 'mesa' && (
@@ -283,8 +293,8 @@ export default function CheckoutSidebar({
 
         {esDomicilio && (
           <div className="flex justify-between text-sm" style={{ color: 'var(--text-2)' }}>
-            <span>Domicilio</span>
-            <span className="font-medium tabular-nums">{formatCOP(domicilio)}</span>
+            <span>{loCobraDomiciliario ? 'Domicilio (lo cobra el domiciliario)' : 'Domicilio'}</span>
+            <span className="font-medium tabular-nums">{loCobraDomiciliario ? '—' : formatCOP(domicilio)}</span>
           </div>
         )}
 
@@ -295,7 +305,7 @@ export default function CheckoutSidebar({
 
         {cajaCerrada && (
           <div className="px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between gap-2" style={estiloAviso}>
-            <span>La caja está cerrada — {puedeAbrirCaja ? 'ábrela para poder cobrar.' : 'pídele a un cajero o admin que la abra.'}</span>
+            <span>La caja está cerrada — {puedeAbrirCaja ? 'ábrela para tomar pedidos y cobrar.' : 'pídele a un cajero o admin que la abra para tomar pedidos.'}</span>
           </div>
         )}
 
@@ -304,7 +314,7 @@ export default function CheckoutSidebar({
             id="btn-enviar"
             type="button"
             onClick={onEnviarCocina}
-            disabled={sinOrden}
+            disabled={sinOrden || cajaCerrada}
             className="rounded-xl font-bold text-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ minHeight: 52, background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-1)' }}
           >

@@ -1,12 +1,14 @@
 // src/components/inventario/TabRecetas.jsx
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useDialogos } from '../../context/DialogosContext';
 import { getProductos, getInsumos, getRecetas, crearReceta, eliminarReceta } from '../../lib/api';
 
 const inputStyle = { background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' };
 
 export default function TabRecetas() {
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
   const [productos, setProductos] = useState([]);
   const [insumos, setInsumos] = useState([]);
   const [recetas, setRecetas] = useState([]);
@@ -36,7 +38,7 @@ export default function TabRecetas() {
     e.preventDefault();
     if (!productoId || !insumoId || !cantidad) return;
     if (productoSeleccionado?.variantes?.length && !varianteId) {
-      alert('Este producto tiene tamaños — elige a cuál aplica la receta');
+      avisar('Este producto tiene tamaños: elige a cuál aplica la receta');
       return;
     }
     try {
@@ -49,17 +51,17 @@ export default function TabRecetas() {
       setInsumoId(''); setCantidad('');
       cargarRecetas();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
   const quitar = async (r) => {
-    if (!confirm('¿Eliminar esta receta?')) return;
+    if (!(await confirmar({ titulo: 'Eliminar receta', mensaje: 'Se eliminará esta receta.', aceptar: 'Eliminar', peligro: true }))) return;
     try {
       await eliminarReceta(r.id, usuario.id);
       cargarRecetas();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 

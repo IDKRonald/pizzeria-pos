@@ -72,13 +72,23 @@ function CampoMonto({ id, etiqueta, value, onChange, placeholder }) {
   );
 }
 
+// Cómo se paga un domicilio. Cada modo fija la forma de pago del pedido.
+const MODOS_DOMICILIO = [
+  { value: 'transferencia', pago: 'transferencia', titulo: 'Cliente paga por transferencia',
+    detalle: 'Incluye el domicilio. Al domiciliario se le paga de la caja.' },
+  { value: 'efectivo_local', pago: 'efectivo', titulo: 'Cliente deja el efectivo en el local',
+    detalle: 'Incluye el domicilio. Al domiciliario se le paga de la caja.' },
+  { value: 'domiciliario', pago: 'efectivo', titulo: 'El domiciliario paga el pedido',
+    detalle: 'Paga solo el pedido y le cobra el domicilio al cliente.' },
+];
+
 /** Modal de cobro: forma de pago, abono, efectivo recibido y confirmación. */
 export default function ModalCobro({
   abierto, onCerrar, total, saldoRestante = 0,
   tipoPago, setTipoPago, esDomicilio, costoDomicilio, setCostoDomicilio,
+  domicilioModo, setDomicilioModo,
   facturarAhorita, setFacturarAhorita, montoAbonar, setMontoAbonar,
-  montoEntregado, setMontoEntregado, imprimirCopia, setImprimirCopia,
-  enviarWhatsapp, setEnviarWhatsapp, isProcesando = false, onConfirmar,
+  montoEntregado, setMontoEntregado, isProcesando = false, onConfirmar,
 }) {
   const dialogoRef = useRef(null);
   // Ref para que un onCerrar inline no reinicie el efecto de foco en cada render.
@@ -121,7 +131,7 @@ export default function ModalCobro({
   const aPagar = facturarAhorita ? (hayAbono ? parseMonto(montoAbonar) : saldoRestante) : 0;
   const recibido = parseMonto(montoEntregado);
   const esEfectivo = tipoPago === 'efectivo';
-  const puede = puedeConfirmarCobro({ tipoPago, recibido, aPagar, isProcesando });
+  const puede = puedeConfirmarCobro({ tipoPago, recibido, aPagar, isProcesando }) && (!esDomicilio || !!domicilioModo);
 
   return (
     <div
@@ -149,6 +159,30 @@ export default function ModalCobro({
           </button>
         </div>
 
+        {esDomicilio ? (
+          <div className="space-y-2" role="group" aria-label="Cómo se paga el domicilio">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-2)' }}>¿Cómo se paga el domicilio?</p>
+            {MODOS_DOMICILIO.map((m) => {
+              const activo = domicilioModo === m.value;
+              return (
+                <button
+                  key={m.value} type="button" data-pago aria-pressed={activo}
+                  onClick={() => { setDomicilioModo(m.value); setTipoPago(m.pago); }}
+                  className="w-full flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg text-left"
+                  style={{
+                    minHeight: 56,
+                    background: activo ? 'var(--accent)' : 'var(--bg-surf6)',
+                    color: activo ? 'var(--on-accent)' : 'var(--text-1)',
+                    border: `1px solid ${activo ? 'var(--accent)' : 'var(--border-2)'}`,
+                  }}
+                >
+                  <span className="text-sm font-bold">{m.titulo}</span>
+                  <span className="text-xs" style={{ opacity: 0.85 }}>{m.detalle}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-2" role="group" aria-label="Forma de pago">
           {TIPOS_PAGO.map((tp) => {
             const activo = tipoPago === tp.value;
@@ -170,6 +204,7 @@ export default function ModalCobro({
             );
           })}
         </div>
+        )}
 
         <Interruptor etiqueta="Facturar ahora" activo={facturarAhorita} onChange={setFacturarAhorita} />
 
@@ -220,11 +255,6 @@ export default function ModalCobro({
             onChange={formatearInput(setCostoDomicilio)} placeholder="Ej. 5.000"
           />
         )}
-
-        <div className="space-y-2">
-          <Interruptor etiqueta="Imprimir copia" activo={imprimirCopia} onChange={setImprimirCopia} />
-          <Interruptor etiqueta="Enviar por WhatsApp" activo={enviarWhatsapp} onChange={setEnviarWhatsapp} />
-        </div>
 
         <button
           type="button" onClick={onConfirmar} disabled={!puede}
