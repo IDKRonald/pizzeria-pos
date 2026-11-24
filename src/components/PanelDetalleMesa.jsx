@@ -30,7 +30,14 @@ function TarjetaPedido({ pedido, accion }) {
             {badge.icon} {pedido.estado.replace('_', ' ').toUpperCase()}
           </span>
         </div>
-        <span className="text-sm font-extrabold text-emerald-400">{formatCOP(pedido.total)}</span>
+        <div className="text-right">
+          <span className="block text-sm font-extrabold text-white">{formatCOP(pedido.total)}</span>
+          {pedido.estado !== 'cancelado' && (
+            <span className={`text-[11px] font-bold ${pedido.monto_pagado >= pedido.total ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {pedido.monto_pagado >= pedido.total ? 'Pagado' : `Debe ${formatCOP(pedido.total - pedido.monto_pagado)}`}
+            </span>
+          )}
+        </div>
       </div>
       <p className="text-xs mb-2" style={{ color: '#64748b' }}>
         {pedido.items.map((i) => `${i.cantidad}× ${i.nombre_display}`).join(', ')}
@@ -96,8 +103,11 @@ export default function PanelDetalleMesa({ mesaId, puedeEditar, onCerrar, onCamb
   };
 
   const pedidos = datos?.pedidos || [];
-  const pendiente = pedidos.find((p) => p.estado === 'pendiente');
-  const enCurso = pedidos.filter((p) => ['en_preparacion', 'listo', 'entregado'].includes(p.estado));
+  // `activo` lo calcula el backend con la misma regla que el estado de la mesa.
+  const pendiente = pedidos.find((p) => p.activo && p.estado === 'pendiente');
+  const enCurso = pedidos.filter((p) => p.activo && p.estado !== 'pendiente');
+  const hoy = new Date().toLocaleDateString('en-CA'); // AAAA-MM-DD local, igual que created_at
+  const cerradosHoy = pedidos.filter((p) => !p.activo && p.created_at.startsWith(hoy));
   const sinPedidosActivos = !pendiente && enCurso.length === 0;
 
   return (
@@ -168,13 +178,13 @@ export default function PanelDetalleMesa({ mesaId, puedeEditar, onCerrar, onCamb
               {/* Historial completo */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#64748b' }}>
-                  Historial de la mesa
+                  Terminados hoy
                 </h3>
-                {pedidos.length === 0 ? (
-                  <p className="text-sm" style={{ color: '#64748b' }}>Sin pedidos todavía.</p>
+                {cerradosHoy.length === 0 ? (
+                  <p className="text-sm" style={{ color: '#64748b' }}>Ningún pedido terminado hoy.</p>
                 ) : (
                   <div className="space-y-2">
-                    {pedidos.map((p) => <TarjetaPedido key={p.id} pedido={p} />)}
+                    {cerradosHoy.map((p) => <TarjetaPedido key={p.id} pedido={p} />)}
                   </div>
                 )}
               </div>

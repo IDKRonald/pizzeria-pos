@@ -9,7 +9,8 @@ const formatCOP = (v) => (v || 0).toLocaleString('es-CO', { style: 'currency', c
 
 export default function TabCaja() {
   const { usuario } = useAuth();
-  const { caja, totales, cajaAbierta, cargandoCaja, refrescarCaja } = useCajaAbierta();
+  const { caja, totales, pendientes, cajaAbierta, cargandoCaja, refrescarCaja } = useCajaAbierta();
+  const [revisados, setRevisados] = useState(false);
   const puedeOperar = ['admin', 'cajero'].includes(usuario.rol);
 
   const [montoInicial, setMontoInicial] = useState('');
@@ -41,11 +42,11 @@ export default function TabCaja() {
 
   const handleCerrar = async (e) => {
     e.preventDefault();
-    if (montoFinal === '') return;
+    if (montoFinal === '' || (pendientes.length > 0 && !revisados)) return;
     setProcesando(true); setError(null);
     try {
       await cerrarCaja(caja.id, { monto_final: Number(montoFinal), notas: notasCierre || null }, usuario.id);
-      setMontoFinal(''); setNotasCierre('');
+      setMontoFinal(''); setNotasCierre(''); setRevisados(false);
       refrescarCaja();
       cargarHistorial();
     } catch (err) {
@@ -104,7 +105,26 @@ export default function TabCaja() {
                 <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Notas (opcional)</label>
                 <input value={notasCierre} onChange={(e) => setNotasCierre(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
               </div>
-              <button type="submit" disabled={procesando} className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: 'rgb(220,38,38)' }}>
+              {pendientes.length > 0 && (
+                <div role="alert" className="p-3 rounded-lg space-y-2" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.4)' }}>
+                  <p className="text-sm font-bold" style={{ color: '#fbbf24' }}>
+                    {pendientes.length === 1 ? 'Hay 1 pedido sin pagar completo' : `Hay ${pendientes.length} pedidos sin pagar completo`}
+                  </p>
+                  <ul className="text-xs space-y-1" style={{ color: '#e2e8f0' }}>
+                    {pendientes.map((p) => (
+                      <li key={p.id} className="flex justify-between gap-2">
+                        <span>#{p.numero_orden} · {p.mesa_numero ? `Mesa ${p.mesa_numero}` : p.tipo === 'domicilio' ? 'Domicilio' : 'Para llevar'}</span>
+                        <span>Total {formatCOP(p.total)} · abonado {formatCOP(p.monto_pagado)} · <b>debe {formatCOP(p.total - p.monto_pagado)}</b></span>
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="flex items-center gap-2 text-xs font-semibold min-h-[44px] cursor-pointer" style={{ color: '#e2e8f0' }}>
+                    <input type="checkbox" checked={revisados} onChange={(e) => setRevisados(e.target.checked)} className="w-5 h-5" />
+                    Los revisé y quiero cerrar de todas formas
+                  </label>
+                </div>
+              )}
+              <button type="submit" disabled={procesando || (pendientes.length > 0 && !revisados)} className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: 'rgb(220,38,38)' }}>
                 {procesando ? 'Cerrando...' : '🔒 Cerrar caja'}
               </button>
             </form>

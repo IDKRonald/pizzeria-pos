@@ -77,8 +77,7 @@ export default function ModalCobro({
   abierto, onCerrar, total, saldoRestante = 0,
   tipoPago, setTipoPago, esDomicilio, costoDomicilio, setCostoDomicilio,
   facturarAhorita, setFacturarAhorita, montoAbonar, setMontoAbonar,
-  montoEntregado, setMontoEntregado, imprimirCopia, setImprimirCopia,
-  enviarWhatsapp, setEnviarWhatsapp, isProcesando = false, onConfirmar,
+  montoEntregado, setMontoEntregado, isProcesando = false, onConfirmar,
 }) {
   const dialogoRef = useRef(null);
   // Ref para que un onCerrar inline no reinicie el efecto de foco en cada render.
@@ -220,11 +219,6 @@ export default function ModalCobro({
             onChange={formatearInput(setCostoDomicilio)} placeholder="Ej. 5.000"
           />
         )}
-
-        <div className="space-y-2">
-          <Interruptor etiqueta="Imprimir copia" activo={imprimirCopia} onChange={setImprimirCopia} />
-          <Interruptor etiqueta="Enviar por WhatsApp" activo={enviarWhatsapp} onChange={setEnviarWhatsapp} />
-        </div>
 
         <button
           type="button" onClick={onConfirmar} disabled={!puede}

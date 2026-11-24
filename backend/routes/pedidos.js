@@ -117,8 +117,8 @@ router.post('/', (req, res) => {
   if (!usuario_id || !items.length) {
     return res.status(400).json({ error: 'usuario_id y items son obligatorios' });
   }
-  if (pago_actual > 0 && !hayCajaAbierta()) {
-    return res.status(409).json({ error: 'No hay una caja abierta — ábrela antes de registrar un pago' });
+  if (!hayCajaAbierta()) {
+    return res.status(409).json({ error: 'La caja está cerrada — ábrela antes de tomar pedidos o cobrar' });
   }
 
   const numero_orden = generarNumeroOrden();
@@ -228,8 +228,8 @@ router.put('/:id', (req, res) => {
   if (!items.length) {
     return res.status(400).json({ error: 'items es obligatorio' });
   }
-  if (pago_actual > 0 && !hayCajaAbierta()) {
-    return res.status(409).json({ error: 'No hay una caja abierta — ábrela antes de registrar un pago' });
+  if (!hayCajaAbierta()) {
+    return res.status(409).json({ error: 'La caja está cerrada — ábrela antes de tomar pedidos o cobrar' });
   }
 
   const pedidoActual = db.prepare('SELECT estado, mesa_id, total, monto_pagado FROM pedidos WHERE id = ?').get(id);

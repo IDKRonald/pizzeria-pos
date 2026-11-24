@@ -26,8 +26,15 @@ router.get('/actual', (_req, res) => {
     const hastaStr = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
     const totales = calcularTotalesPeriodo(caja.fecha_apertura, hastaStr, caja.id);
     totales.monto_esperado_efectivo = caja.monto_inicial + totales.total_efectivo;
+    // Pedidos del turno con saldo: se muestran antes de cerrar para que nadie cierre sin revisarlos.
+    const pendientes = db.prepare(`
+      SELECT p.id, p.numero_orden, p.tipo, p.total, p.monto_pagado, p.created_at, m.numero AS mesa_numero
+      FROM pedidos p LEFT JOIN mesas m ON m.id = p.mesa_id
+      WHERE p.estado != 'cancelado' AND p.monto_pagado < p.total AND p.created_at >= ?
+      ORDER BY p.created_at ASC
+    `).all(caja.fecha_apertura);
 
-    res.json({ caja, totales });
+    res.json({ caja, totales, pendientes });
   } catch (error) {
     console.error('Error al obtener caja actual:', error);
     res.status(500).json({ error: 'Error interno al obtener caja actual' });

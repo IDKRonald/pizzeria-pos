@@ -295,7 +295,7 @@ export default function CheckoutSidebar({
 
         {cajaCerrada && (
           <div className="px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between gap-2" style={estiloAviso}>
-            <span>La caja está cerrada — {puedeAbrirCaja ? 'ábrela para poder cobrar.' : 'pídele a un cajero o admin que la abra.'}</span>
+            <span>La caja está cerrada — {puedeAbrirCaja ? 'ábrela para tomar pedidos y cobrar.' : 'pídele a un cajero o admin que la abra para tomar pedidos.'}</span>
           </div>
         )}
 
@@ -304,7 +304,7 @@ export default function CheckoutSidebar({
             id="btn-enviar"
             type="button"
             onClick={onEnviarCocina}
-            disabled={sinOrden}
+            disabled={sinOrden || cajaCerrada}
             className="rounded-xl font-bold text-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ minHeight: 52, background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-1)' }}
           >
