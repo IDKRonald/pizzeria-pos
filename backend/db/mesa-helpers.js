@@ -49,9 +49,12 @@ export function sincronizarEstadoMesa(mesaId, io) {
   const miembros = obtenerMiembrosGrupo(mesaId);
   const placeholders = miembros.map(() => '?').join(',');
 
+  // Un pedido pagado por completo y ya listo o entregado no ocupa la mesa: cobrar no cambia
+  // el estado de cocina, así que sin esta condición la mesa quedaba "por pagar" para siempre.
   const pedidosActivos = db.prepare(`
     SELECT estado FROM pedidos
     WHERE mesa_id IN (${placeholders}) AND estado IN (${ESTADOS_NO_TERMINALES.map(() => '?').join(',')})
+      AND NOT (monto_pagado >= total AND estado IN ('listo', 'entregado'))
   `).all(...miembros, ...ESTADOS_NO_TERMINALES);
 
   let nuevoEstado = 'libre';

@@ -21,8 +21,10 @@ export function useCajaAbierta() {
 
   useEffect(() => {
     refrescar();
-    socket.on('caja_actualizada', refrescar);
-    return () => socket.off('caja_actualizada', refrescar);
+    // Los cobros cambian los totales: sin esto, el cuadre en pantalla quedaba viejo al cerrar.
+    const eventos = ['caja_actualizada', 'nuevo_pedido', 'pedido_actualizado'];
+    eventos.forEach((e) => socket.on(e, refrescar));
+    return () => eventos.forEach((e) => socket.off(e, refrescar));
   }, [refrescar]);
 
   return { caja, totales, cajaAbierta: !!caja, cargandoCaja: cargando, refrescarCaja: refrescar };

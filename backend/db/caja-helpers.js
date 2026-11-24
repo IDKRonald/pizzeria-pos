@@ -25,15 +25,18 @@ export function obtenerCajaAbierta() {
  * Totales de pagos reales entre [desde, hasta) — excluye pedidos cancelados.
  * Se usa tanto para el resumen en vivo (GET /caja/actual) como para el cierre
  * final, con la misma lógica exacta en ambos casos.
+ * Con `cajaId`, cuenta los pagos de esa caja; el rango de fechas queda solo para
+ * pagos viejos registrados antes de que existiera pagos.caja_id.
  */
-export function calcularTotalesPeriodo(desde, hasta) {
+export function calcularTotalesPeriodo(desde, hasta, cajaId = null) {
   const filas = db.prepare(`
     SELECT p.metodo_pago, SUM(p.monto) as total, COUNT(*) as cantidad
     FROM pagos p
     JOIN pedidos ped ON ped.id = p.pedido_id
-    WHERE ped.estado != 'cancelado' AND p.created_at >= ? AND p.created_at < ?
+    WHERE ped.estado != 'cancelado'
+      AND (p.caja_id = ? OR (p.caja_id IS NULL AND p.created_at >= ? AND p.created_at < ?))
     GROUP BY p.metodo_pago
-  `).all(desde, hasta);
+  `).all(cajaId, desde, hasta);
 
   const totales = {
     total_efectivo: 0, total_transferencia: 0, total_tarjeta_debito: 0,

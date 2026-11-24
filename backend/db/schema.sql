@@ -186,6 +186,8 @@ CREATE TABLE IF NOT EXISTS pagos (
   pedido_id     INTEGER NOT NULL,
   monto         INTEGER NOT NULL,
   metodo_pago   TEXT    NOT NULL,
+  usuario_id    INTEGER REFERENCES usuarios(id),          -- quién cobró
+  caja_id       INTEGER REFERENCES cierres_caja(id),      -- caja abierta al cobrar
   created_at    TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE
 );

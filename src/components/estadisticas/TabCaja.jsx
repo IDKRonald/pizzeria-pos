@@ -77,10 +77,11 @@ export default function TabCaja() {
             <span className="px-2 py-1 rounded-lg text-xs font-bold" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}>● Activa</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Base inicial</p><p className="text-base font-bold text-white">{formatCOP(caja.monto_inicial)}</p></div>
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Efectivo vendido</p><p className="text-base font-bold text-emerald-400">{formatCOP(totales.total_efectivo)}</p></div>
-            <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Otros medios</p><p className="text-base font-bold text-blue-400">{formatCOP(totales.total_general - totales.total_efectivo)}</p></div>
+            <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Transferencias</p><p className="text-base font-bold text-blue-400">{formatCOP(totales.total_transferencia)}</p></div>
+            <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Tarjetas y otros</p><p className="text-base font-bold text-blue-400">{formatCOP(totales.total_general - totales.total_efectivo - totales.total_transferencia)}</p></div>
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Efectivo esperado</p><p className="text-base font-bold text-amber-400">{formatCOP(totales.monto_esperado_efectivo)}</p></div>
           </div>
 

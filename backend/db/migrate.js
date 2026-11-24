@@ -138,4 +138,16 @@ export function runMigrations(db) {
       console.log('🔧 Migración: cierres_caja.diferencia agregada');
     }
   }
+
+  if (tablaExiste(db, 'pagos')) {
+    const cols = db.prepare(`PRAGMA table_info(pagos)`).all().map((c) => c.name);
+    if (!cols.includes('usuario_id')) {
+      db.exec(`ALTER TABLE pagos ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`);
+      console.log('🔧 Migración: pagos.usuario_id agregada');
+    }
+    if (!cols.includes('caja_id')) {
+      db.exec(`ALTER TABLE pagos ADD COLUMN caja_id INTEGER REFERENCES cierres_caja(id)`);
+      console.log('🔧 Migración: pagos.caja_id agregada');
+    }
+  }
 }

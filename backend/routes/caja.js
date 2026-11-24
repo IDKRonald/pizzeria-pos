@@ -24,7 +24,7 @@ router.get('/actual', (_req, res) => {
     const ahora = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const hastaStr = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-    const totales = calcularTotalesPeriodo(caja.fecha_apertura, hastaStr);
+    const totales = calcularTotalesPeriodo(caja.fecha_apertura, hastaStr, caja.id);
     totales.monto_esperado_efectivo = caja.monto_inicial + totales.total_efectivo;
 
     res.json({ caja, totales });
@@ -72,7 +72,7 @@ router.post('/:id/cerrar', requireCajero, (req, res) => {
     const ahora = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const hastaStr = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
-    const totales = calcularTotalesPeriodo(caja.fecha_apertura, hastaStr);
+    const totales = calcularTotalesPeriodo(caja.fecha_apertura, hastaStr, caja.id);
     const diferencia = Number(monto_final) - (caja.monto_inicial + totales.total_efectivo);
 
     db.prepare(`
