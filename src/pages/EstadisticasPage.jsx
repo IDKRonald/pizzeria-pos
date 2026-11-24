@@ -5,9 +5,11 @@ import TabVentas from '../components/estadisticas/TabVentas';
 import TabProductos from '../components/estadisticas/TabProductos';
 import TabRentabilidad from '../components/estadisticas/TabRentabilidad';
 import TabCaja from '../components/estadisticas/TabCaja';
+import TabPedidos from '../components/estadisticas/TabPedidos';
 
 const TABS = [
   { id: 'ventas',       label: 'Ventas',       emoji: '💰' },
+  { id: 'pedidos',      label: 'Pedidos',      emoji: '📋' },
   { id: 'productos',    label: 'Productos',    emoji: '🏆' },
   { id: 'rentabilidad', label: 'Rentabilidad', emoji: '📈' },
   { id: 'caja',         label: 'Caja',         emoji: '🧾' },
@@ -58,6 +60,7 @@ export default function EstadisticasPage() {
       {/* Contenido */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-6">
         {tabActiva === 'ventas' && <TabVentas />}
+        {tabActiva === 'pedidos' && <TabPedidos />}
         {tabActiva === 'productos' && <TabProductos />}
         {tabActiva === 'rentabilidad' && <TabRentabilidad />}
         {tabActiva === 'caja' && <TabCaja />}

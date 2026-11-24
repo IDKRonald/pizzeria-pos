@@ -11,12 +11,13 @@ export function useCajaAbierta() {
   const [caja, setCaja] = useState(null);
   const [totales, setTotales] = useState(null);
   const [pendientes, setPendientes] = useState([]);
+  const [movimientos, setMovimientos] = useState([]);
   const [cargando, setCargando] = useState(true);
 
   const refrescar = useCallback(() => {
     getCajaActual()
-      .then((d) => { setCaja(d.caja); setTotales(d.totales); setPendientes(d.pendientes || []); })
-      .catch(() => { setCaja(null); setTotales(null); setPendientes([]); })
+      .then((d) => { setCaja(d.caja); setTotales(d.totales); setPendientes(d.pendientes || []); setMovimientos(d.movimientos || []); })
+      .catch(() => { setCaja(null); setTotales(null); setPendientes([]); setMovimientos([]); })
       .finally(() => setCargando(false));
   }, []);
 
@@ -28,5 +29,5 @@ export function useCajaAbierta() {
     return () => eventos.forEach((e) => socket.off(e, refrescar));
   }, [refrescar]);
 
-  return { caja, totales, pendientes, cajaAbierta: !!caja, cargandoCaja: cargando, refrescarCaja: refrescar };
+  return { caja, totales, pendientes, movimientos, cajaAbierta: !!caja, cargandoCaja: cargando, refrescarCaja: refrescar };
 }

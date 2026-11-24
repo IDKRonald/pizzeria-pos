@@ -92,6 +92,23 @@ router.get('/', (req, res) => {
  * Body esperado: { mesa_id, usuario_id, estado, tipo, subtotal, impuestos, total, propina, metodo_pago, items }
  * items: [{ producto_id, variante_id, nombre_display, cantidad, precio_unitario, subtotal, notas }]
  */
+const MODOS_DOMICILIO = ['transferencia', 'efectivo_local', 'domiciliario'];
+
+/**
+ * Si el cliente pagó el domicilio al local (transferencia o efectivo dejado en el local),
+ * al domiciliario se le paga en efectivo de la caja: se registra esa salida una sola vez.
+ * En modo 'domiciliario' él paga el pedido y cobra su parte al cliente, así que no hay salida.
+ */
+function registrarPagoDomiciliario(pedidoId, usuarioId) {
+  const p = db.prepare('SELECT costo_domicilio, domicilio_modo FROM pedidos WHERE id = ?').get(pedidoId);
+  if (!p || p.costo_domicilio <= 0 || !['transferencia', 'efectivo_local'].includes(p.domicilio_modo)) return;
+  const ya = db.prepare(`SELECT 1 FROM movimientos_caja WHERE pedido_id = ? AND tipo = 'pago_domiciliario'`).get(pedidoId);
+  const caja = obtenerCajaAbierta();
+  if (ya || !caja) return;
+  db.prepare(`INSERT INTO movimientos_caja (caja_id, tipo, monto, nota, pedido_id, usuario_id) VALUES (?, 'pago_domiciliario', ?, 'Pago a domiciliario', ?, ?)`)
+    .run(caja.id, p.costo_domicilio, pedidoId, usuarioId || null);
+}
+
 /** Guarda un pago con quién lo cobró y en qué caja, para poder rastrear cada venta. */
 function registrarPago(pedidoId, monto, metodoPago, usuarioId) {
   db.prepare('INSERT INTO pagos (pedido_id, monto, metodo_pago, usuario_id, caja_id) VALUES (?, ?, ?, ?, ?)')
@@ -111,8 +128,10 @@ router.post('/', (req, res) => {
     costo_domicilio = 0,
     pago_actual = 0,
     metodo_pago = 'efectivo',
+    domicilio_modo = null,
     items = []
   } = req.body;
+  const modoDomicilio = tipo === 'domicilio' && MODOS_DOMICILIO.includes(domicilio_modo) ? domicilio_modo : null;
 
   if (!usuario_id || !items.length) {
     return res.status(400).json({ error: 'usuario_id y items son obligatorios' });
@@ -127,8 +146,8 @@ router.post('/', (req, res) => {
 
   // Preparamos los statements para la transacción
   const insertPedido = db.prepare(`
-    INSERT INTO pedidos (numero_orden, mesa_id, usuario_id, estado, tipo, subtotal, impuestos, total, propina, costo_domicilio, monto_pagado, metodo_pago)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO pedidos (numero_orden, mesa_id, usuario_id, estado, tipo, subtotal, impuestos, total, propina, costo_domicilio, monto_pagado, metodo_pago, domicilio_modo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertDetalle = db.prepare(`
@@ -141,13 +160,14 @@ router.post('/', (req, res) => {
     // 1. Guardar el pedido
     const resPedido = insertPedido.run(
       numero_orden, mesaResuelta, usuario_id, estado, tipo,
-      subtotal, impuestos, total, propina, costo_domicilio, pago_actual, metodo_pago
+      subtotal, impuestos, total, propina, costo_domicilio, pago_actual, metodo_pago, modoDomicilio
     );
     const pedido_id = resPedido.lastInsertRowid;
 
     // 1.1 Registrar el pago si hay abono
     if (pago_actual > 0) {
       registrarPago(pedido_id, pago_actual, metodo_pago, usuario_id);
+      registrarPagoDomiciliario(pedido_id, usuario_id);
     }
 
     // 2. Guardar los items
@@ -219,6 +239,7 @@ router.put('/:id', (req, res) => {
     costo_domicilio = 0,
     pago_actual = 0,
     metodo_pago = 'efectivo',
+    domicilio_modo = null,
     items = [],
     // 'editar': el mesero cambia los ítems — solo permitido si cocina no lo ha tomado aún.
     // 'cobrar' (o sin especificar): registrar pago / avanzar estado — sin ese candado.
@@ -242,10 +263,11 @@ router.put('/:id', (req, res) => {
   // El estado lo avanza la cocina (PATCH /:id/estado). La caja reenvía el que vio al abrir el
   // pedido, que puede estar viejo: aplicarlo devolvía a "pendiente" pedidos ya listos.
   const estado = pedidoActual.estado;
+  const modoDomicilio = tipo === 'domicilio' && MODOS_DOMICILIO.includes(domicilio_modo) ? domicilio_modo : null;
 
   const updatePedido = db.prepare(`
     UPDATE pedidos
-    SET mesa_id = ?, estado = ?, tipo = ?, subtotal = ?, impuestos = ?, total = ?, propina = ?, costo_domicilio = ?, monto_pagado = monto_pagado + ?, metodo_pago = ?, updated_at = datetime('now','localtime')
+    SET mesa_id = ?, estado = ?, tipo = ?, subtotal = ?, impuestos = ?, total = ?, propina = ?, costo_domicilio = ?, monto_pagado = monto_pagado + ?, metodo_pago = ?, domicilio_modo = ?, updated_at = datetime('now','localtime')
     WHERE id = ?
   `);
 
@@ -257,10 +279,11 @@ router.put('/:id', (req, res) => {
   `);
 
   const actualizarPedido = db.transaction(() => {
-    updatePedido.run(mesa_id, estado, tipo, subtotal, impuestos, total, propina, costo_domicilio, pago_actual, metodo_pago, id);
+    updatePedido.run(mesa_id, estado, tipo, subtotal, impuestos, total, propina, costo_domicilio, pago_actual, metodo_pago, modoDomicilio, id);
 
     if (pago_actual > 0) {
       registrarPago(id, pago_actual, metodo_pago, req.body.usuario_id || null);
+      registrarPagoDomiciliario(id, req.body.usuario_id || null);
     }
 
     deleteDetalles.run(id);

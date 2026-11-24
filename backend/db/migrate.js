@@ -139,6 +139,14 @@ export function runMigrations(db) {
     }
   }
 
+  if (tablaExiste(db, 'pedidos')) {
+    const cols = db.prepare(`PRAGMA table_info(pedidos)`).all().map((c) => c.name);
+    if (!cols.includes('domicilio_modo')) {
+      db.exec(`ALTER TABLE pedidos ADD COLUMN domicilio_modo TEXT`);
+      console.log('🔧 Migración: pedidos.domicilio_modo agregada');
+    }
+  }
+
   if (tablaExiste(db, 'pagos')) {
     const cols = db.prepare(`PRAGMA table_info(pagos)`).all().map((c) => c.name);
     if (!cols.includes('usuario_id')) {

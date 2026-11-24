@@ -44,6 +44,7 @@ export default function CheckoutSidebar({
   esDomicilio,
   setEsDomicilio,
   costoDomicilio,
+  domicilioModo = null,
   setCostoDomicilio,
   conPropina,
   setConPropina,
@@ -68,7 +69,9 @@ export default function CheckoutSidebar({
   const subtotal   = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
   const propina    = conPropina ? Math.round(subtotal * 0.10) : 0;
   const domicilio  = esDomicilio ? parseMonto(costoDomicilio) : 0;
-  const total      = subtotal + propina + domicilio;
+  // Si el domiciliario paga el pedido, el domicilio lo cobra él: no suma al total del local.
+  const loCobraDomiciliario = domicilioModo === 'domiciliario';
+  const total      = subtotal + propina + (loCobraDomiciliario ? 0 : domicilio);
   const totalItems = cart.reduce((acc, item) => acc + item.cantidad, 0);
 
   const elegirTipo = (nuevo) => {
@@ -283,8 +286,8 @@ export default function CheckoutSidebar({
 
         {esDomicilio && (
           <div className="flex justify-between text-sm" style={{ color: 'var(--text-2)' }}>
-            <span>Domicilio</span>
-            <span className="font-medium tabular-nums">{formatCOP(domicilio)}</span>
+            <span>{loCobraDomiciliario ? 'Domicilio (lo cobra el domiciliario)' : 'Domicilio'}</span>
+            <span className="font-medium tabular-nums">{loCobraDomiciliario ? '—' : formatCOP(domicilio)}</span>
           </div>
         )}
 

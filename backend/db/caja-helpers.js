@@ -42,6 +42,18 @@ export function calcularTotalesPeriodo(desde, hasta, cajaId = null) {
     total_efectivo: 0, total_transferencia: 0, total_tarjeta_debito: 0,
     total_tarjeta_credito: 0, total_otros: 0, total_general: 0, cantidad_pagos: 0,
   };
+  // Salidas de efectivo de la caja: solo aplican cuando se calcula para una caja concreta.
+  totales.total_retiros = 0; totales.total_gastos = 0; totales.total_domiciliarios = 0;
+  if (cajaId) {
+    const salidas = db.prepare('SELECT tipo, SUM(monto) AS total FROM movimientos_caja WHERE caja_id = ? GROUP BY tipo').all(cajaId);
+    for (const s of salidas) {
+      if (s.tipo === 'retiro') totales.total_retiros = s.total;
+      else if (s.tipo === 'gasto') totales.total_gastos = s.total;
+      else totales.total_domiciliarios = s.total;
+    }
+  }
+  totales.total_salidas = totales.total_retiros + totales.total_gastos + totales.total_domiciliarios;
+
   for (const f of filas) {
     totales.total_general += f.total;
     totales.cantidad_pagos += f.cantidad;

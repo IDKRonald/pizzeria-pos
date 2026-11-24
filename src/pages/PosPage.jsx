@@ -121,6 +121,8 @@ export default function PosPage() {
   const [cobroAbierto, setCobroAbierto] = useState(false);
   // "Mesa" elegida en el segmentado aunque todavía no haya número.
   const [quiereMesa, setQuiereMesa] = useState(false);
+  // Cómo se paga un domicilio: 'transferencia' | 'efectivo_local' | 'domiciliario' (null = sin elegir).
+  const [domicilioModo, setDomicilioModo] = useState(null);
   // Abrir el cobro implica facturar ahora.
   const abrirCobro = useCallback(() => { setFacturarAhorita(true); setCobroAbierto(true); }, []);
   const cerrarCobro = useCallback(() => { setCobroAbierto(false); setFacturarAhorita(false); setMontoAbonar(""); }, []);
@@ -267,7 +269,7 @@ export default function PosPage() {
   }, [edicionBloqueada]);
 
   const resetOrden = useCallback(() => {
-    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado(''); setQuiereMesa(false);
+    setCart([]); setTipoPago('efectivo'); setEsDomicilio(false); setCostoDomicilio(''); setCartDrawerOpen(false); setMesa(''); setMontoEntregado(''); setQuiereMesa(false); setDomicilioModo(null);
     setFacturarAhorita(false); setMontoAbonar(''); setMontoPagadoHistorico(0); setEstadoOriginal('pendiente');
     setPedidoActivoId(null); setOrdenActivaNum(null); setModoEdicion(null); setMesaInfo(null);
   }, []);
@@ -279,6 +281,7 @@ export default function PosPage() {
     setMesa(pedidoDB.mesa_id ? String(pedidoDB.mesa_id) : '');
     setQuiereMesa(Boolean(pedidoDB.mesa_id));
     setEsDomicilio(pedidoDB.tipo === 'domicilio');
+    setDomicilioModo(pedidoDB.domicilio_modo || null);
     setTipoPago(pedidoDB.metodo_pago || 'efectivo');
     setMontoPagadoHistorico(pedidoDB.monto_pagado || 0);
     setEstadoOriginal(pedidoDB.estado || 'pendiente');
@@ -328,7 +331,7 @@ export default function PosPage() {
   const procesarPedidoDB = async (estado, registrarPago = false) => {
     const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
     const prop = conPropina ? Math.round(sub * 0.10) : 0;
-    const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
+    const dom  = esDomicilio && domicilioModo !== 'domiciliario' ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
     const tot  = sub + prop + dom;
 
     // Un ítem de combo se manda como 2 líneas adyacentes: el combo (precio completo)
@@ -383,8 +386,10 @@ export default function PosPage() {
       impuestos: 0,
       total: tot,
       propina: prop,
-      costo_domicilio: dom,
+      // Se guarda el costo real aunque lo cobre el domiciliario, para que quede registrado.
+      costo_domicilio: esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0,
       metodo_pago: tipoPago,
+      domicilio_modo: esDomicilio ? domicilioModo : null,
       pago_actual,
       items: itemsDB,
       modo: modoEdicion || 'cobrar',
@@ -407,7 +412,7 @@ export default function PosPage() {
       // 2. Imprimir recibo
       const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
       const prop = conPropina ? Math.round(sub * 0.10) : 0;
-      const dom  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
+      const dom  = esDomicilio && domicilioModo !== 'domiciliario' ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
       const tot = sub + prop + dom;
       const saldoRestante = tot - montoPagadoHistorico;
       const abonoRaw = parseInt(String(montoAbonar).replace(/\D/g, ''));
@@ -432,7 +437,7 @@ export default function PosPage() {
       alert(err?.message || 'Error al guardar el pedido en la base de datos');
       setIsProcesando(false);
     }
-  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, montoEntregado, resetOrden, usuario, facturarAhorita, montoAbonar, costoDomicilio, montoPagadoHistorico]);
+  }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, montoEntregado, resetOrden, usuario, facturarAhorita, montoAbonar, costoDomicilio, domicilioModo, montoPagadoHistorico]);
 
   const handleEnviarCocina = useCallback(async () => {
     if (cart.length === 0 || isProcesando || edicionBloqueada || cajaCerrada) return;
@@ -636,7 +641,8 @@ export default function PosPage() {
 
     const subtotal   = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
     const propina    = conPropina ? Math.round(subtotal * 0.10) : 0;
-    const domicilio  = esDomicilio ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
+    // En modo 'domiciliario' el domicilio no es venta del local: él lo cobra al cliente.
+    const domicilio  = esDomicilio && domicilioModo !== 'domiciliario' ? (parseInt(String(costoDomicilio).replace(/\D/g, '')) || 0) : 0;
     const total      = subtotal + propina + domicilio;
   const totalItems = cart.reduce((acc, i) => acc + i.cantidad, 0);
 
@@ -685,6 +691,7 @@ export default function PosPage() {
         saldoRestante={total - montoPagadoHistorico}
         tipoPago={tipoPago} setTipoPago={setTipoPago}
         esDomicilio={esDomicilio} costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+        domicilioModo={domicilioModo} setDomicilioModo={setDomicilioModo}
         facturarAhorita={facturarAhorita} setFacturarAhorita={setFacturarAhorita}
         montoAbonar={montoAbonar} setMontoAbonar={setMontoAbonar}
         montoEntregado={montoEntregado} setMontoEntregado={setMontoEntregado}
@@ -919,7 +926,7 @@ export default function PosPage() {
             onDecrementar={handleDecrementar} onCancelar={handleCancelar}
             onAbrirCobro={abrirCobro} quiereMesa={quiereMesa} setQuiereMesa={setQuiereMesa} mesas={mesas} onEnviarCocina={handleEnviarCocina} isProcesando={isProcesando}
             esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
-            costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+            costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio} domicilioModo={domicilioModo}
             conPropina={conPropina} setConPropina={setConPropina}
             mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}
@@ -984,7 +991,7 @@ export default function PosPage() {
               onEnviarCocina={handleEnviarCocina}
               isProcesando={isProcesando}
               esDomicilio={esDomicilio} setEsDomicilio={setEsDomicilio}
-              costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio}
+              costoDomicilio={costoDomicilio} setCostoDomicilio={setCostoDomicilio} domicilioModo={domicilioModo}
               conPropina={conPropina} setConPropina={setConPropina}
               mesa={mesa} setMesa={setMesa} mesaInfo={mesaInfo} edicionBloqueada={edicionBloqueada}
             cajaCerrada={cajaCerrada} puedeAbrirCaja={puedeAbrirCaja} onIrACaja={() => navigate('/estadisticas?tab=caja')}

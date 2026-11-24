@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
   metodo_pago   TEXT    DEFAULT 'efectivo'
                 CHECK(metodo_pago IN ('efectivo','transferencia','tarjeta_debito','tarjeta_credito','mixto')),
   notas         TEXT,
+  domicilio_modo TEXT,                                   -- transferencia | efectivo_local | domiciliario
   created_at    TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
   FOREIGN KEY (mesa_id)    REFERENCES mesas(id),
@@ -190,6 +191,18 @@ CREATE TABLE IF NOT EXISTS pagos (
   caja_id       INTEGER REFERENCES cierres_caja(id),      -- caja abierta al cobrar
   created_at    TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE
+);
+
+-- ─── Salidas de efectivo de la caja (retiros, gastos, pagos a domiciliarios) ──
+CREATE TABLE IF NOT EXISTS movimientos_caja (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  caja_id     INTEGER NOT NULL REFERENCES cierres_caja(id),
+  tipo        TEXT    NOT NULL CHECK(tipo IN ('retiro','gasto','pago_domiciliario')),
+  monto       INTEGER NOT NULL CHECK(monto > 0),
+  nota        TEXT,
+  pedido_id   INTEGER REFERENCES pedidos(id),            -- solo pago_domiciliario
+  usuario_id  INTEGER REFERENCES usuarios(id),
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
 -- ─── Cierres de caja ────────────────────────────────────────

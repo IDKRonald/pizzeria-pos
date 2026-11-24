@@ -2,14 +2,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useCajaAbierta } from '../../hooks/useCajaAbierta';
-import { abrirCaja, cerrarCaja, getCajaHistorial } from '../../lib/api';
+import { abrirCaja, cerrarCaja, getCajaHistorial, registrarMovimientoCaja } from '../../lib/api';
+
+const ETIQUETA_SALIDA = { retiro: 'Retiro', gasto: 'Gasto', pago_domiciliario: 'Pago a domiciliario' };
 
 const inputStyle = { background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' };
 const formatCOP = (v) => (v || 0).toLocaleString('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
 
 export default function TabCaja() {
   const { usuario } = useAuth();
-  const { caja, totales, pendientes, cajaAbierta, cargandoCaja, refrescarCaja } = useCajaAbierta();
+  const { caja, totales, pendientes, movimientos, cajaAbierta, cargandoCaja, refrescarCaja } = useCajaAbierta();
+  const [salida, setSalida] = useState({ tipo: 'gasto', monto: '', nota: '' });
   const [revisados, setRevisados] = useState(false);
   const puedeOperar = ['admin', 'cajero'].includes(usuario.rol);
 
@@ -32,6 +35,22 @@ export default function TabCaja() {
     try {
       await abrirCaja({ monto_inicial: Number(montoInicial) || 0, notas: notasApertura || null }, usuario.id);
       setMontoInicial(''); setNotasApertura('');
+      refrescarCaja();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const handleSalida = async (e) => {
+    e.preventDefault();
+    const monto = Number(String(salida.monto).replace(/\D/g, ''));
+    if (!monto) return;
+    setProcesando(true); setError(null);
+    try {
+      await registrarMovimientoCaja({ tipo: salida.tipo, monto, nota: salida.nota || null }, usuario.id);
+      setSalida({ tipo: salida.tipo, monto: '', nota: '' });
       refrescarCaja();
     } catch (err) {
       setError(err.message);
@@ -78,12 +97,60 @@ export default function TabCaja() {
             <span className="px-2 py-1 rounded-lg text-xs font-bold" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}>● Activa</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Base inicial</p><p className="text-base font-bold text-white">{formatCOP(caja.monto_inicial)}</p></div>
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Efectivo vendido</p><p className="text-base font-bold text-emerald-400">{formatCOP(totales.total_efectivo)}</p></div>
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Transferencias</p><p className="text-base font-bold text-blue-400">{formatCOP(totales.total_transferencia)}</p></div>
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Tarjetas y otros</p><p className="text-base font-bold text-blue-400">{formatCOP(totales.total_general - totales.total_efectivo - totales.total_transferencia)}</p></div>
+            <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Salidas de efectivo</p><p className="text-base font-bold text-red-400">− {formatCOP(totales.total_salidas)}</p></div>
             <div><p className="text-[11px] uppercase font-bold" style={{ color: '#64748b' }}>Efectivo esperado</p><p className="text-base font-bold text-amber-400">{formatCOP(totales.monto_esperado_efectivo)}</p></div>
+          </div>
+
+          <p className="text-xs" style={{ color: '#64748b' }}>Efectivo esperado = base inicial + efectivo vendido − salidas de efectivo.</p>
+
+          {/* Salidas de efectivo: retiros, gastos y pagos a domiciliarios (estos últimos los registra el cobro). */}
+          <div className="pt-3 space-y-3" style={{ borderTop: '1px solid #2a2a3a' }}>
+            <p className="text-sm font-bold text-white">Salidas de efectivo</p>
+            {movimientos.length === 0 ? (
+              <p className="text-xs" style={{ color: '#64748b' }}>No hay salidas registradas en esta caja.</p>
+            ) : (
+              <ul className="text-xs space-y-1" style={{ color: '#e2e8f0' }}>
+                {movimientos.map((m) => (
+                  <li key={m.id} className="flex justify-between gap-2">
+                    <span>
+                      {new Date(m.created_at.replace(' ', 'T')).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })} · {ETIQUETA_SALIDA[m.tipo]}
+                      {m.numero_orden ? ` · #${m.numero_orden}` : ''}{m.nota && m.tipo !== 'pago_domiciliario' ? ` · ${m.nota}` : ''}
+                    </span>
+                    <span className="font-bold text-red-400">− {formatCOP(m.monto)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {puedeOperar && (
+              <form onSubmit={handleSalida} className="grid grid-cols-1 sm:grid-cols-[auto_1fr_2fr_auto] gap-2 items-end">
+                <label className="text-[11px] font-bold uppercase" style={{ color: '#64748b' }}>Tipo
+                  <select value={salida.tipo} onChange={(e) => setSalida((s) => ({ ...s, tipo: e.target.value }))}
+                    className="block w-full mt-1 px-3 py-2 rounded-lg text-sm min-h-[44px]" style={inputStyle}>
+                    <option value="gasto">Gasto</option>
+                    <option value="retiro">Retiro</option>
+                  </select>
+                </label>
+                <label className="text-[11px] font-bold uppercase" style={{ color: '#64748b' }}>Valor
+                  <input required inputMode="numeric" value={salida.monto} placeholder="Ej: 20000"
+                    onChange={(e) => setSalida((s) => ({ ...s, monto: e.target.value.replace(/\D/g, '') }))}
+                    className="block w-full mt-1 px-3 py-2 rounded-lg text-sm min-h-[44px]" style={inputStyle} />
+                </label>
+                <label className="text-[11px] font-bold uppercase" style={{ color: '#64748b' }}>Nota
+                  <input value={salida.nota} placeholder="Ej: compra de hielo"
+                    onChange={(e) => setSalida((s) => ({ ...s, nota: e.target.value }))}
+                    className="block w-full mt-1 px-3 py-2 rounded-lg text-sm min-h-[44px]" style={inputStyle} />
+                </label>
+                <button type="submit" disabled={procesando || !salida.monto}
+                  className="min-h-[44px] px-4 rounded-lg text-sm font-bold text-white disabled:opacity-50" style={{ background: '#2a2a3a' }}>
+                  Registrar salida
+                </button>
+              </form>
+            )}
           </div>
 
           {puedeOperar && (

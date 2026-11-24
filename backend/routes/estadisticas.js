@@ -19,6 +19,64 @@ router.get('/ventas', (req, res) => {
   }
 });
 
+const POR_PAGINA = 20;
+
+/**
+ * GET /api/estadisticas/pedidos?desde=&hasta=&tipo=&metodo=&estado_pago=&pagina=
+ * Solo los campos de la lista; el detalle de cada pedido se pide aparte.
+ */
+router.get('/pedidos', (req, res) => {
+  try {
+    const { desde, hasta } = resolverRango(req.query);
+    const cond = ['p.created_at >= ?', 'p.created_at < ?'];
+    const params = [desde, hasta];
+    if (['mesa', 'mostrador', 'domicilio'].includes(req.query.tipo)) { cond.push('p.tipo = ?'); params.push(req.query.tipo); }
+    if (req.query.metodo) { cond.push('EXISTS (SELECT 1 FROM pagos pg WHERE pg.pedido_id = p.id AND pg.metodo_pago = ?)'); params.push(req.query.metodo); }
+    if (req.query.estado_pago === 'pagado') cond.push("p.estado != 'cancelado' AND p.monto_pagado >= p.total");
+    else if (req.query.estado_pago === 'debe') cond.push("p.estado != 'cancelado' AND p.monto_pagado < p.total");
+    else if (req.query.estado_pago === 'cancelado') cond.push("p.estado = 'cancelado'");
+    const where = cond.join(' AND ');
+    const pagina = Math.max(1, Number(req.query.pagina) || 1);
+
+    const { total } = db.prepare(`SELECT COUNT(*) AS total FROM pedidos p WHERE ${where}`).get(...params);
+    const pedidos = db.prepare(`
+      SELECT p.id, p.numero_orden, p.created_at, p.tipo, p.estado, p.total, p.monto_pagado, m.numero AS mesa_numero,
+        (SELECT GROUP_CONCAT(DISTINCT pg.metodo_pago) FROM pagos pg WHERE pg.pedido_id = p.id) AS metodos
+      FROM pedidos p LEFT JOIN mesas m ON m.id = p.mesa_id
+      WHERE ${where}
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, POR_PAGINA, (pagina - 1) * POR_PAGINA);
+
+    res.json({ total, pagina, por_pagina: POR_PAGINA, pedidos });
+  } catch (error) {
+    console.error('Error al listar pedidos:', error);
+    res.status(500).json({ error: 'Error interno al listar pedidos' });
+  }
+});
+
+/** GET /api/estadisticas/pedidos/:id — productos, abonos (con quién cobró) y salidas del pedido */
+router.get('/pedidos/:id', (req, res) => {
+  try {
+    const pedido = db.prepare(`
+      SELECT p.*, m.numero AS mesa_numero, u.nombre AS tomado_por
+      FROM pedidos p LEFT JOIN mesas m ON m.id = p.mesa_id LEFT JOIN usuarios u ON u.id = p.usuario_id
+      WHERE p.id = ?
+    `).get(req.params.id);
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+    pedido.items = db.prepare('SELECT nombre_display, cantidad, precio_unitario, subtotal, notas FROM detalle_pedido WHERE pedido_id = ? ORDER BY id').all(pedido.id);
+    pedido.pagos = db.prepare(`
+      SELECT pg.monto, pg.metodo_pago, pg.created_at, u.nombre AS cobrado_por
+      FROM pagos pg LEFT JOIN usuarios u ON u.id = pg.usuario_id WHERE pg.pedido_id = ? ORDER BY pg.created_at
+    `).all(pedido.id);
+    pedido.salidas = db.prepare('SELECT tipo, monto, created_at FROM movimientos_caja WHERE pedido_id = ?').all(pedido.id);
+    res.json(pedido);
+  } catch (error) {
+    console.error('Error al obtener pedido:', error);
+    res.status(500).json({ error: 'Error interno al obtener el pedido' });
+  }
+});
+
 /** Filas vendidas en el rango (una por producto/variante), reutilizada por ambos reportes. */
 function obtenerVentasPorProducto(desde, hasta) {
   return db.prepare(`
