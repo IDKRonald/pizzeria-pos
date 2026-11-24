@@ -1,7 +1,9 @@
 // src/components/inventario/TabInsumos.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useDialogos } from '../../context/DialogosContext';
 import { getInsumos, crearInsumo, actualizarInsumo, eliminarInsumo, ajustarStockInsumo, getProveedores } from '../../lib/api';
+import { milesConDecimales, numeroDesdeMiles } from '../../lib/venta';
 
 const inputStyle = { background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' };
 const UNIDADES_SUGERIDAS = ['unidad', 'kg', 'gramo', 'litro', 'ml', 'caja', 'bandeja', 'paquete', 'porción'];
@@ -14,6 +16,7 @@ function estadoStock(i) {
 
 export default function TabInsumos() {
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
   const [insumos, setInsumos] = useState([]);
   const [proveedores, setProveedores] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -41,34 +44,34 @@ export default function TabInsumos() {
   useEffect(() => { getProveedores().then(setProveedores).catch(() => {}); }, []);
 
   const abrirNuevo = () => {
-    setForm({ nombre: '', unidad: 'unidad', stock_actual: 0, stock_min: 0, stock_max: 0, precio_compra: 0, modo_descuento: 'manual', proveedor_id: '' });
+    setForm({ nombre: '', unidad: 'unidad', stock_actual: 0, stock_min: 0, stock_max: 0, precio_compra: '', modo_descuento: 'manual', proveedor_id: '' });
     setEditando({});
   };
   const abrirEditar = (i) => {
-    setForm({ nombre: i.nombre, unidad: i.unidad, stock_min: i.stock_min, stock_max: i.stock_max, precio_compra: i.precio_compra, modo_descuento: i.modo_descuento, proveedor_id: i.proveedor_id || '', activo: i.activo });
+    setForm({ nombre: i.nombre, unidad: i.unidad, stock_min: i.stock_min, stock_max: i.stock_max, precio_compra: milesConDecimales(String(i.precio_compra).replace('.', ',')), modo_descuento: i.modo_descuento, proveedor_id: i.proveedor_id || '', activo: i.activo });
     setEditando(i);
   };
 
   const guardar = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...form, proveedor_id: form.proveedor_id || null };
+      const payload = { ...form, precio_compra: numeroDesdeMiles(form.precio_compra), proveedor_id: form.proveedor_id || null };
       if (editando.id) await actualizarInsumo(editando.id, payload, usuario.id);
       else await crearInsumo(payload, usuario.id);
       setEditando(null);
       cargar();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
   const eliminar = async (i) => {
-    if (!confirm(`¿Eliminar el insumo "${i.nombre}"?`)) return;
+    if (!(await confirmar({ titulo: 'Eliminar insumo', mensaje: `Se eliminará "${i.nombre}".`, aceptar: 'Eliminar', peligro: true }))) return;
     try {
       await eliminarInsumo(i.id, usuario.id);
       cargar();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
@@ -81,7 +84,7 @@ export default function TabInsumos() {
       setAjustando(null);
       cargar();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
@@ -211,7 +214,7 @@ export default function TabInsumos() {
             </div>
             <div>
               <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Precio de compra</label>
-              <input type="number" step="any" value={form.precio_compra} onChange={(e) => setForm((f) => ({ ...f, precio_compra: e.target.value }))}
+              <input inputMode="decimal" value={form.precio_compra} onChange={(e) => setForm((f) => ({ ...f, precio_compra: milesConDecimales(e.target.value) }))}
                 className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
             </div>
             <div>

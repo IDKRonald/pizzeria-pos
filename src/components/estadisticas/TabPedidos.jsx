@@ -121,7 +121,7 @@ export default function TabPedidos() {
                       onClick={() => setAbierto(abierto === p.id ? null : p.id)}>
                       <td className="px-3 py-2" style={{ color: '#94a3b8' }}>{fechaHora(p.created_at)}</td>
                       <td className="px-3 py-2">
-                        <button type="button" aria-expanded={abierto === p.id} className="font-bold text-white min-h-[44px]">#{p.numero_orden}</button>
+                        <button type="button" aria-expanded={abierto === p.id} className="font-bold text-white min-h-[44px]">{p.numero_orden}</button>
                       </td>
                       <td className="px-3 py-2" style={{ color: '#e2e8f0' }}>{MODALIDAD[p.tipo]}{p.mesa_numero ? ` ${p.mesa_numero}` : ''}</td>
                       <td className="px-3 py-2" style={{ color: '#e2e8f0' }}>{p.metodos ? p.metodos.split(',').map((m) => ETIQUETAS_PAGO[m] || m).join(' + ') : '—'}</td>

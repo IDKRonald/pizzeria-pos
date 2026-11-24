@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { useDialogos } from '../context/DialogosContext';
 import { getPedidosPendientes, actualizarEstadoPedido } from '../lib/api';
 import socket from '../lib/socket';
 
@@ -18,6 +19,7 @@ const formatHora = (isoStr) => {
 export default function KdsPage() {
   const navigate = useNavigate();
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
 
   const [pedidos, setPedidos] = useState([]);
   const [horaActual, setHoraActual] = useState(new Date());
@@ -107,7 +109,7 @@ export default function KdsPage() {
   // último momento, ej. el cliente se tuvo que ir. Si ya estaba pagado, revierte
   // el descuento de inventario automáticamente (lo hace el backend).
   const handleCancelar = useCallback(async (pedido) => {
-    if (!confirm(`¿Cancelar el pedido ${pedido.numero_orden}? Esta acción no se puede deshacer.`)) return;
+    if (!(await confirmar({ titulo: `Cancelar pedido ${pedido.numero_orden}`, mensaje: 'Esta acción no se puede deshacer.', aceptar: 'Cancelar pedido', cancelar: 'Volver', peligro: true }))) return;
 
     setPedidos((prev) => prev.filter(p => p.id !== pedido.id));
     setPedidoDetalle((prev) => (prev?.id === pedido.id ? null : prev));
@@ -116,9 +118,9 @@ export default function KdsPage() {
       await actualizarEstadoPedido(pedido.id, 'cancelado');
     } catch (err) {
       console.error('Error al cancelar pedido:', err);
-      alert('No se pudo cancelar el pedido: ' + (err?.message || 'error desconocido'));
+      avisar('No se pudo cancelar el pedido: ' + (err?.message || 'error desconocido'));
     }
-  }, []);
+  }, [avisar, confirmar]);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#0a0a0f' }}>

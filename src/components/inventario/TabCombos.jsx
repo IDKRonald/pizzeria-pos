@@ -1,12 +1,14 @@
 // src/components/inventario/TabCombos.jsx
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useDialogos } from '../../context/DialogosContext';
 import { getProductos, getCategorias, getCombos, crearCombo, actualizarCombo, eliminarCombo } from '../../lib/api';
 
 const inputStyle = { background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' };
 
 export default function TabCombos() {
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [combos, setCombos] = useState([]);
@@ -54,17 +56,17 @@ export default function TabCombos() {
       setEditando(null);
       cargarCombos();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
   const quitar = async (combo) => {
-    if (!confirm(`¿Quitar la configuración de combo de "${combo.producto_nombre}"?`)) return;
+    if (!(await confirmar({ titulo: 'Quitar combo', mensaje: `Se quitará la configuración de combo de "${combo.producto_nombre}".`, aceptar: 'Quitar', peligro: true }))) return;
     try {
       await eliminarCombo(combo.id, usuario.id);
       cargarCombos();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 

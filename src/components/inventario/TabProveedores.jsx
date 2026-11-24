@@ -1,6 +1,7 @@
 // src/components/inventario/TabProveedores.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useDialogos } from '../../context/DialogosContext';
 import { getProveedores, crearProveedor, actualizarProveedor, eliminarProveedor } from '../../lib/api';
 
 const inputStyle = { background: '#1e1e2d', border: '1px solid #2a2a3a', color: '#fff' };
@@ -12,6 +13,7 @@ function waLink(telefono) {
 
 export default function TabProveedores() {
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
   const [proveedores, setProveedores] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
@@ -35,17 +37,17 @@ export default function TabProveedores() {
       setEditando(null);
       cargar();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
   const eliminar = async (p) => {
-    if (!confirm(`¿Eliminar proveedor "${p.nombre}"?`)) return;
+    if (!(await confirmar({ titulo: 'Eliminar proveedor', mensaje: `Se eliminará "${p.nombre}".`, aceptar: 'Eliminar', peligro: true }))) return;
     try {
       await eliminarProveedor(p.id, usuario.id);
       cargar();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 

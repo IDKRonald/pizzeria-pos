@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { useDialogos } from '../context/DialogosContext';
 import { getPedidosDeMesa, separarMesas, liberarMesa } from '../lib/api';
 
 const formatCOP = (v) =>
@@ -50,6 +51,7 @@ function TarjetaPedido({ pedido, accion }) {
 export default function PanelDetalleMesa({ mesaId, puedeEditar, onCerrar, onCambio }) {
   const navigate = useNavigate();
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
 
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -81,24 +83,24 @@ export default function PanelDetalleMesa({ mesaId, puedeEditar, onCerrar, onCamb
 
   const handleSepararMesas = async () => {
     if (!datos?.grupo) return;
-    if (!confirm('Al separar, el pedido compartido se queda en la mesa principal y las demás quedan libres sin ese historial. ¿Continuar?')) return;
+    if (!(await confirmar({ titulo: 'Separar mesas', mensaje: 'El pedido compartido se queda en la mesa principal y las demás quedan libres, sin ese historial.', aceptar: 'Separar' }))) return;
     try {
       await separarMesas(datos.grupo.id, usuario.id);
       onCambio?.();
       onCerrar();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
   const handleLiberar = async () => {
-    if (!confirm('Esto fuerza el estado de la mesa a "libre" manualmente. ¿Continuar?')) return;
+    if (!(await confirmar({ titulo: 'Forzar mesa libre', mensaje: 'La mesa quedará libre aunque tenga pedidos activos. Úsalo solo si quedó trabada.', aceptar: 'Dejar libre', peligro: true }))) return;
     try {
       await liberarMesa(mesaId, usuario.id);
       onCambio?.();
       cargar();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 

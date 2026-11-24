@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useCajaAbierta } from '../../hooks/useCajaAbierta';
 import { abrirCaja, cerrarCaja, getCajaHistorial, registrarMovimientoCaja } from '../../lib/api';
+import { miles } from '../../lib/venta';
 
 const ETIQUETA_SALIDA = { retiro: 'Retiro', gasto: 'Gasto', pago_domiciliario: 'Pago a domiciliario' };
 
@@ -119,7 +120,7 @@ export default function TabCaja() {
                   <li key={m.id} className="flex justify-between gap-2">
                     <span>
                       {new Date(m.created_at.replace(' ', 'T')).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })} · {ETIQUETA_SALIDA[m.tipo]}
-                      {m.numero_orden ? ` · #${m.numero_orden}` : ''}{m.nota && m.tipo !== 'pago_domiciliario' ? ` · ${m.nota}` : ''}
+                      {m.numero_orden ? ` · ${m.numero_orden}` : ''}{m.nota && m.tipo !== 'pago_domiciliario' ? ` · ${m.nota}` : ''}
                     </span>
                     <span className="font-bold text-red-400">− {formatCOP(m.monto)}</span>
                   </li>
@@ -136,7 +137,7 @@ export default function TabCaja() {
                   </select>
                 </label>
                 <label className="text-[11px] font-bold uppercase" style={{ color: '#64748b' }}>Valor
-                  <input required inputMode="numeric" value={salida.monto} placeholder="Ej: 20000"
+                  <input required inputMode="numeric" value={miles(salida.monto)} placeholder="Ej: 20.000"
                     onChange={(e) => setSalida((s) => ({ ...s, monto: e.target.value.replace(/\D/g, '') }))}
                     className="block w-full mt-1 px-3 py-2 rounded-lg text-sm min-h-[44px]" style={inputStyle} />
                 </label>
@@ -158,8 +159,8 @@ export default function TabCaja() {
               <p className="text-sm font-bold text-white">Cerrar caja</p>
               <div>
                 <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Efectivo contado físicamente</label>
-                <input required type="number" value={montoFinal} onChange={(e) => setMontoFinal(e.target.value)}
-                  placeholder={String(totales.monto_esperado_efectivo)} className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
+                <input required inputMode="numeric" value={miles(montoFinal)} onChange={(e) => setMontoFinal(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Escribe el efectivo que contaste" className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
                 {montoFinal !== '' && (
                   <p className="text-xs mt-1" style={{ color: Number(montoFinal) - totales.monto_esperado_efectivo === 0 ? '#34d399' : '#f87171' }}>
                     {Number(montoFinal) - totales.monto_esperado_efectivo === 0
@@ -180,7 +181,7 @@ export default function TabCaja() {
                   <ul className="text-xs space-y-1" style={{ color: '#e2e8f0' }}>
                     {pendientes.map((p) => (
                       <li key={p.id} className="flex justify-between gap-2">
-                        <span>#{p.numero_orden} · {p.mesa_numero ? `Mesa ${p.mesa_numero}` : p.tipo === 'domicilio' ? 'Domicilio' : 'Para llevar'}</span>
+                        <span>{p.numero_orden} · {p.mesa_numero ? `Mesa ${p.mesa_numero}` : p.tipo === 'domicilio' ? 'Domicilio' : 'Para llevar'}</span>
                         <span>Total {formatCOP(p.total)} · abonado {formatCOP(p.monto_pagado)} · <b>debe {formatCOP(p.total - p.monto_pagado)}</b></span>
                       </li>
                     ))}
@@ -202,7 +203,7 @@ export default function TabCaja() {
           <p className="text-sm font-bold text-white">Abrir caja</p>
           <div>
             <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Base inicial en efectivo</label>
-            <input required type="number" value={montoInicial} onChange={(e) => setMontoInicial(e.target.value)} placeholder="Ej: 100000" className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
+            <input required inputMode="numeric" value={miles(montoInicial)} onChange={(e) => setMontoInicial(e.target.value.replace(/\D/g, ''))} placeholder="Ej: 100.000" className="w-full px-3 py-2 rounded-lg text-sm" style={inputStyle} />
           </div>
           <div>
             <label className="block text-[11px] font-bold uppercase mb-1" style={{ color: '#64748b' }}>Notas (opcional)</label>

@@ -131,7 +131,8 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* Usuarios de prueba */}
+      {/* PINs de prueba: solo en desarrollo, nunca en el local */}
+      {import.meta.env.DEV && (
       <div className="mt-10 text-center">
         <p className="text-xs mb-2" style={{ color: '#475569' }}>PINs de acceso rápido</p>
         <div className="flex gap-2 flex-wrap justify-center">
@@ -153,6 +154,7 @@ export default function LoginPage() {
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }

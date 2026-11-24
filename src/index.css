@@ -90,6 +90,9 @@ html, body, #root {
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar        { width: 5px; }
+/* Filas de chips: se desplazan con el dedo o la rueda, sin barra visible */
+.sin-barra { scrollbar-width: none; }
+.sin-barra::-webkit-scrollbar { display: none; }
 ::-webkit-scrollbar-track  { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb  { background: var(--scrollbar-thumb); border-radius: 3px; }
 

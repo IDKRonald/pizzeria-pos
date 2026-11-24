@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { useDialogos } from '../context/DialogosContext';
 import socket from '../lib/socket';
 import { getMesas, crearMesa, actualizarMesa, eliminarMesa, fusionarMesas } from '../lib/api';
 import PanelDetalleMesa from '../components/PanelDetalleMesa';
@@ -23,6 +24,7 @@ const MESA_H = 92;
 export default function MesasPage() {
   const navigate = useNavigate();
   const { usuario } = useAuth();
+  const { avisar, confirmar } = useDialogos();
   const puedeEditar = usuario.rol === 'admin';
 
   const [mesas, setMesas] = useState([]);
@@ -126,12 +128,12 @@ export default function MesasPage() {
 
   /* ── Eliminar mesa ── */
   const handleEliminarMesa = async (mesa) => {
-    if (!confirm(`¿Eliminar la mesa ${mesa.numero}?`)) return;
+    if (!(await confirmar({ titulo: `Eliminar mesa ${mesa.numero}`, mensaje: 'La mesa desaparecerá del salón.', aceptar: 'Eliminar', peligro: true }))) return;
     try {
       await eliminarMesa(mesa.id, usuario.id);
       cargarMesas();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 
@@ -144,7 +146,7 @@ export default function MesasPage() {
       setSeleccionFusion([]);
       cargarMesas();
     } catch (err) {
-      alert(err.message);
+      avisar(err.message);
     }
   };
 

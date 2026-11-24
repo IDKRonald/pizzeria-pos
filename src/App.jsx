@@ -3,6 +3,7 @@
 
 import { BrowserRouter, Routes, Route } from 'react-router';
 import { AuthProvider } from './context/AuthContext';
+import { DialogosProvider } from './context/DialogosContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import LoginPage from './pages/LoginPage';
@@ -18,6 +19,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <DialogosProvider>
         <Routes>
           {/* Login público */}
           <Route path="/" element={<LoginPage />} />
@@ -48,6 +50,7 @@ export default function App() {
           {/* Fallback */}
           <Route path="*" element={<LoginPage />} />
         </Routes>
+        </DialogosProvider>
       </AuthProvider>
     </BrowserRouter>
   );

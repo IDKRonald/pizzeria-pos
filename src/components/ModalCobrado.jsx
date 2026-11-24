@@ -46,7 +46,7 @@ export default function ModalCobrado({ recibo, impresion, onImprimir, onWhatsApp
           <h2 id="cobrado-titulo" className="text-xl font-extrabold">
             {saldo > 0 ? 'Abono registrado' : 'Cobro registrado'}
           </h2>
-          <p className="text-sm text-[var(--text-3)]">Orden #{recibo.ordenNumero}</p>
+          <p className="text-sm text-[var(--text-3)]">Orden {recibo.ordenNumero}</p>
           <p className="text-3xl font-extrabold tabular-nums">{formatCOP(recibo.pagoActual)}</p>
           {cambio > 0 && <p className="text-base font-bold" style={{ color: '#10b981' }}>Cambio: {formatCOP(cambio)}</p>}
           {saldo > 0 && <p className="text-sm font-bold" style={{ color: '#f59e0b' }}>Queda debiendo {formatCOP(saldo)}</p>}

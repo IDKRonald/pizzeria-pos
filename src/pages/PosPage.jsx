@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { useDialogos } from '../context/DialogosContext';
 import { getProductos, getCategorias, crearPedido, actualizarPedidoCompleto, getMesas } from '../lib/api';
 import { useCajaAbierta } from '../hooks/useCajaAbierta';
 import { debeEnfocarBusqueda } from '../lib/venta';
@@ -32,7 +33,7 @@ function construirTextoFactura(recibo) {
   const subtotal = total - propina - costoDomicilio;
   const lineas = [
     '🍕 *Pizzería Don Peñolinni*',
-    `Orden #${ordenNumero} · ${fechaHora}`,
+    `Orden ${ordenNumero} · ${fechaHora}`,
     esDomicilio ? 'Domicilio' : mesa ? `Mesa: ${mesa}` : 'Venta mostrador',
     '',
     ...cart.map((i) => `${i.cantidad}x ${i.nombre} — ${formatCOP(i.precio * i.cantidad)}`),
@@ -49,9 +50,8 @@ function construirTextoFactura(recibo) {
   return lineas.join('\n');
 }
 
-/** Pide el número del cliente y abre WhatsApp con la factura ya redactada, lista para enviar */
-function enviarPorWhatsApp(recibo) {
-  const numeroCrudo = prompt('Número de WhatsApp del cliente (ej: 3001234567):');
+/** Abre WhatsApp con la factura ya redactada para el número dado, lista para enviar */
+function enviarPorWhatsApp(recibo, numeroCrudo) {
   if (!numeroCrudo) return;
   let digitos = numeroCrudo.replace(/\D/g, '');
   if (digitos.length === 10) digitos = '57' + digitos; // celular colombiano sin indicativo
@@ -70,6 +70,11 @@ export default function PosPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { usuario } = useAuth();
+  const { avisar, pedirTexto } = useDialogos();
+  const pedirWhatsApp = useCallback(async (recibo) => {
+    const numero = await pedirTexto({ titulo: 'Enviar por WhatsApp', etiqueta: 'Número del cliente', placeholder: 'Ej: 3001234567', inputMode: 'tel', aceptar: 'Abrir WhatsApp' });
+    enviarPorWhatsApp(recibo, numero);
+  }, [pedirTexto]);
   const { cajaAbierta, cargandoCaja } = useCajaAbierta();
   const cajaCerrada = !cargandoCaja && !cajaAbierta;
   const puedeAbrirCaja = ['admin', 'cajero'].includes(usuario?.rol);
@@ -407,7 +412,8 @@ export default function PosPage() {
 
     try {
       // 1. Guardar en BD. Si ya existe mantenemos su estado. Si es nuevo, 'pendiente' para que vaya a cocina.
-      await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente', true);
+      // El comprobante lleva el número real del pedido (DP-0001), no el provisional de la pantalla.
+      const guardado = await procesarPedidoDB(pedidoActivoId ? estadoOriginal : 'pendiente', true);
 
       // 2. Imprimir recibo
       const sub = cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
@@ -419,7 +425,7 @@ export default function PosPage() {
       const pago_actual = facturarAhorita ? (!isNaN(abonoRaw) ? abonoRaw : saldoRestante) : 0;
 
       const recibo = {
-        cart, total: tot, ordenNumero, fechaHora,
+        cart, total: tot, ordenNumero: guardado?.numero_orden || ordenNumero, fechaHora,
         tipoPago, esDomicilio, propina: prop, costoDomicilio: dom, mesa,
         montoEntregado: tipoPago === 'efectivo' ? (parseInt(montoEntregado.toString().replace(/\D/g, '')) || 0) : 0,
         pagoActual: pago_actual,
@@ -434,7 +440,7 @@ export default function PosPage() {
       setToastMsg(`✅ Cobro registrado · ${formatCOP(pago_actual)}`);
     } catch (err) {
       console.error('Error al cobrar:', err);
-      alert(err?.message || 'Error al guardar el pedido en la base de datos');
+      avisar(err?.message || 'Error al guardar el pedido en la base de datos');
       setIsProcesando(false);
     }
   }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, ordenNumero, fechaHora, tipoPago, esDomicilio, mesa, montoEntregado, resetOrden, usuario, facturarAhorita, montoAbonar, costoDomicilio, domicilioModo, montoPagadoHistorico]);
@@ -455,7 +461,7 @@ export default function PosPage() {
       }, 500);
     } catch (err) {
       console.error('Error al enviar:', err);
-      alert(err?.message || 'Error al enviar el pedido');
+      avisar(err?.message || 'Error al enviar el pedido');
       setIsProcesando(false);
     }
   }, [cart, isProcesando, edicionBloqueada, cajaCerrada, conPropina, tipoPago, esDomicilio, costoDomicilio, mesa, ordenNumero, fechaHora, montoPagadoHistorico, resetOrden, usuario]);
@@ -474,7 +480,7 @@ export default function PosPage() {
 
   const handleEnviarWhatsApp = useCallback(() => {
     if (!ultimoRecibo) return;
-    enviarPorWhatsApp(ultimoRecibo);
+    pedirWhatsApp(ultimoRecibo);
   }, [ultimoRecibo]);
 
   /* ── Atajos de teclado y Accesibilidad ── */
@@ -699,7 +705,7 @@ export default function PosPage() {
         onConfirmar={handleCobrar}
       />
       <ModalCobrado recibo={cobrado} impresion={impresion} onImprimir={imprimirRecibo}
-        onWhatsApp={() => enviarPorWhatsApp(cobrado)} onCerrar={() => setCobrado(null)} />
+        onWhatsApp={() => pedirWhatsApp(cobrado)} onCerrar={() => setCobrado(null)} />
       {showQR && <ModalQR onCerrar={() => setShowQR(false)} />}
 
       {showCuentas && (
@@ -865,7 +871,7 @@ export default function PosPage() {
           {/* ── Filtros de categoría (chips) ── */}
           <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3"
             style={{ background: 'var(--bg-surf5)', borderBottom: '1px solid var(--border-1)' }}>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 sin-barra">
               {categoriasMenu.map((cat, idx) => {
                 const activo = categoriaActiva === cat.id;
                 const conteo = cat.id === 'Todos'

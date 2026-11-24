@@ -256,7 +256,7 @@ export default function CartaPage() {
               </label>
               <Chip activo={soloSinFoto} onClick={() => setSoloSinFoto((v) => !v)} conteo={sinFoto}>Sin foto</Chip>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 sin-barra">
               <Chip activo={categoriaId === null} onClick={() => setCategoriaId(null)} conteo={productos.length}>Todas</Chip>
               {categoriasOrdenadas.map((c) => (
                 <Chip key={c.id} activo={categoriaId === c.id} onClick={() => setCategoriaId(c.id)} conteo={conteos[c.id] || 0}>

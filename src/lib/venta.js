@@ -7,6 +7,22 @@ const _cop = new Intl.NumberFormat('es-CO', {
 /** Formatea un número como pesos colombianos. */
 export const formatCOP = (n) => _cop.format(n);
 
+/** Texto de un campo de dinero con separador de miles: '1500000' → '1.500.000'; vacío queda vacío. */
+export const miles = (v) => {
+  const digitos = String(v ?? '').replace(/\D/g, '');
+  return digitos ? Number(digitos).toLocaleString('es-CO') : '';
+};
+
+/** Igual que `miles` pero admite hasta 2 decimales con coma: '12345,5' → '12.345,5'. */
+export const milesConDecimales = (v) => {
+  const [entero, ...resto] = String(v ?? '').replace(/[^\d,]/g, '').split(',');
+  const base = miles(entero) || (resto.length ? '0' : '');
+  return resto.length ? `${base},${resto.join('').slice(0, 2)}` : base;
+};
+
+/** Número desde un texto con separador de miles y coma decimal: '12.345,5' → 12345.5. */
+export const numeroDesdeMiles = (v) => Number(String(v ?? '').replace(/\./g, '').replace(',', '.')) || 0;
+
 /** Extrae solo los dígitos; sin dígitos devuelve 0. */
 export const parseMonto = (v) => {
   const digitos = String(v ?? '').replace(/\D/g, '');

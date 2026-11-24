@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { miles } from '../lib/venta';
 
 export default function ModalCustomItem({ onSeleccionar, onCerrar }) {
   const [nombre, setNombre] = useState('');
@@ -89,11 +90,9 @@ export default function ModalCustomItem({ onSeleccionar, onCerrar }) {
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold" style={{ color: 'var(--text-4)' }}>$</span>
               <input
-                type="number"
-                min="0"
-                step="100"
-                value={precio}
-                onChange={(e) => setPrecio(e.target.value)}
+                inputMode="numeric"
+                value={miles(precio)}
+                onChange={(e) => setPrecio(e.target.value.replace(/\D/g, ''))}
                 placeholder="0"
                 className="w-full pl-7 pr-3 py-2 rounded-xl text-sm outline-none transition-all font-bold"
                 style={{ background: 'var(--bg-surf6)', border: '1px solid var(--border-2)', color: 'var(--text-1)' }}
